@@ -342,7 +342,6 @@ export default defineComponent({
   padding: 0;
   background: #1e1e1e;
   overflow: hidden;
-  padding-bottom: 50px;
 }
 
 .terminal-container :deep(.xterm) {
@@ -352,7 +351,7 @@ export default defineComponent({
 
 .terminal-container :deep(.xterm-screen) {
   overflow: hidden;
-  margin-bottom: -50px;
+  padding-bottom: 100px;
 }
 
 .terminal-container :deep(.xterm-screen canvas) {
