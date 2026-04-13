@@ -6,7 +6,7 @@ import { FileService } from './services/FileService.mjs'
 import { GitService } from './services/GitService.mjs'
 
 const app = express()
-const PORT = 3001
+const PORT = 5001
 
 app.use(cors())
 app.use(express.json())
@@ -134,6 +134,16 @@ app.get('/api/directory', async (req, res) => {
   }
 })
 
+app.post('/api/directory-batch', async (req, res) => {
+  try {
+    const { path, showHidden } = req.body
+    const entries = await fileService.readDirectoryBatch(path, showHidden)
+    res.json(entries)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
 app.get('/api/is-directory', (req, res) => {
   const { path } = req.query
   res.json(fileService.isDirectory(path))
@@ -184,6 +194,16 @@ app.post('/api/kill-port', async (req, res) => {
     const { port } = req.body
     const result = await fileService.killPort(port)
     res.json({ result })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.post('/api/is-git-ignored', async (req, res) => {
+  try {
+    const { path } = req.body
+    const result = fileService.isGitIgnored(path)
+    res.json(result)
   } catch (e) {
     res.status(500).json({ error: e.message })
   }

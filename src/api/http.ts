@@ -1,5 +1,5 @@
-const API_BASE = 'http://localhost:3001/api'
-const WS_BASE = 'ws://localhost:3002'
+const API_BASE = 'http://localhost:5001/api'
+const WS_BASE = 'ws://localhost:5002'
 
 export interface Project {
   id: string
@@ -128,6 +128,19 @@ export const getHomeDir = () =>
 export const readDirectory = (path: string, showHidden: boolean) =>
   apiCall<string[]>('/directory?path=' + encodeURIComponent(path) + '&showHidden=' + showHidden)
 
+export interface DirEntryInfo {
+  name: string
+  path: string
+  isDirectory: boolean
+  isGitIgnored: boolean
+}
+
+export const readDirectoryBatch = (path: string, showHidden: boolean): Promise<DirEntryInfo[]> =>
+  apiCall<DirEntryInfo[]>('/directory-batch', {
+    method: 'POST',
+    body: JSON.stringify({ path, showHidden }),
+  })
+
 export const isDirectory = (path: string) =>
   apiCall<boolean>('/is-directory?path=' + encodeURIComponent(path))
 
@@ -157,6 +170,12 @@ export const killPort = (port: number) =>
     method: 'POST',
     body: JSON.stringify({ port }),
   }).then(res => res.result)
+
+export const isGitIgnored = (path: string) =>
+  apiCall<boolean>('/is-git-ignored', {
+    method: 'POST',
+    body: JSON.stringify({ path }),
+  })
 
 // 搜索
 export interface SearchResult {
