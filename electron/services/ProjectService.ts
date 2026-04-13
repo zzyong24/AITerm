@@ -121,7 +121,12 @@ export class ProjectService {
           execSync('cursor --version', { stdio: 'ignore' })
           appName = 'Cursor'
         } catch {
-          throw new Error('未配置编辑器，请先在设置中配置编辑器路径')
+          try {
+            execSync('lingma --version', { stdio: 'ignore' })
+            appName = 'Lingma'
+          } catch {
+            throw new Error('未配置编辑器，请先在设置中配置编辑器路径')
+          }
         }
       }
     }

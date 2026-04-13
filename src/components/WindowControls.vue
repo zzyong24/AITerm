@@ -1,5 +1,21 @@
 <template>
   <div class="titlebar" @dblclick="handleDoubleClick">
+    <div class="titlebar-tools">
+      <button class="tool-btn" @click="handleRefreshProjects" title="刷新项目列表">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M23 4v6h-6M1 20v-6h6"/>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+        </svg>
+      </button>
+      <button class="tool-btn" @click="showKillPortModal = true" title="终止端口进程">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M15 9l-6 6M9 9l6 6"/>
+        </svg>
+        <span>Kill Port</span>
+      </button>
+    </div>
+
     <div class="window-controls">
       <button class="window-btn minimize" @click="handleMinimize" title="最小化">
         <svg width="10" height="1" viewBox="0 0 10 1">
@@ -21,19 +37,42 @@
         </svg>
       </button>
     </div>
+
+    <!-- Kill Port Modal -->
+    <div v-if="showKillPortModal" class="modal-overlay" @click="showKillPortModal = false">
+      <div class="modal" @click.stop>
+        <div class="modal-header">
+          <span>终止端口进程</span>
+          <button class="modal-close" @click="showKillPortModal = false">×</button>
+        </div>
+        <div class="modal-body">
+          <label>
+            端口号
+            <input v-model="killPortInput" type="number" placeholder="例如: 3001" @keydown.enter="handleKillPort" autofocus />
+          </label>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-cancel" @click="showKillPortModal = false">取消</button>
+          <button class="btn-confirm" @click="handleKillPort">终止</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script lang="ts">
 import { defineComponent } from 'vue'
-import { windowMinimize, windowMaximize, windowClose, windowIsMaximized } from '../api'
+import { windowMinimize, windowMaximize, windowClose, windowIsMaximized, killPort } from '../api'
+import { appBusiness } from '../store/AppBusiness'
 
 export default defineComponent({
   name: 'WindowControls',
 
   data() {
     return {
-      isMaximized: false
+      isMaximized: false,
+      showKillPortModal: false,
+      killPortInput: ''
     }
   },
 
@@ -57,8 +96,26 @@ export default defineComponent({
 
     handleDoubleClick(e: MouseEvent) {
       const target = e.target as HTMLElement
-      if (target.closest('.window-controls')) return
+      if (target.closest('.window-controls') || target.closest('.titlebar-tools')) return
       this.handleMaximize()
+    },
+
+    handleRefreshProjects() {
+      appBusiness.refreshProjects()
+    },
+
+    async handleKillPort() {
+      const port = parseInt(this.killPortInput)
+      if (isNaN(port) || port <= 0) {
+        return
+      }
+      try {
+        await killPort(port)
+        this.showKillPortModal = false
+        this.killPortInput = ''
+      } catch (e) {
+        console.error('Failed to kill port:', e)
+      }
     }
   }
 })
@@ -72,11 +129,44 @@ export default defineComponent({
   -webkit-app-region: drag;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: 99998;
+}
+
+.titlebar-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 12px;
+  -webkit-app-region: no-drag;
+}
+
+.tool-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  color: #d4d4d4;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tool-btn:hover {
+  background: #3e3e42;
+  border-color: #007acc;
+}
+
+.tool-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 .window-controls {
@@ -85,7 +175,6 @@ export default defineComponent({
   gap: 0;
   height: 100%;
   -webkit-app-region: no-drag;
-  margin-left: auto;
 }
 
 .window-btn {
@@ -116,5 +205,115 @@ export default defineComponent({
 
 .window-btn.close:active {
   background: #bf0f1d;
+}
+
+/* Modal styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+}
+
+.modal {
+  background: #252526;
+  border: 1px solid #3e3e42;
+  border-radius: 8px;
+  width: 320px;
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #2d2d2d;
+  border-bottom: 1px solid #3e3e42;
+  font-size: 14px;
+  font-weight: 500;
+  color: #d4d4d4;
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  color: #858585;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.modal-close:hover {
+  color: #d4d4d4;
+}
+
+.modal-body {
+  padding: 16px;
+}
+
+.modal-body label {
+  display: block;
+  font-size: 12px;
+  color: #858585;
+  margin-bottom: 8px;
+}
+
+.modal-body input {
+  width: 100%;
+  padding: 8px 12px;
+  background: #1e1e1e;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  color: #d4d4d4;
+  font-size: 14px;
+  outline: none;
+}
+
+.modal-body input:focus {
+  border-color: #007acc;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid #3e3e42;
+}
+
+.btn-cancel, .btn-confirm {
+  padding: 6px 16px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-cancel {
+  background: transparent;
+  border: 1px solid #3e3e42;
+  color: #d4d4d4;
+}
+
+.btn-cancel:hover {
+  background: #3e3e42;
+}
+
+.btn-confirm {
+  background: #007acc;
+  border: none;
+  color: #fff;
+}
+
+.btn-confirm:hover {
+  background: #005a9e;
 }
 </style>

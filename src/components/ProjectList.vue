@@ -469,7 +469,8 @@ export default defineComponent({
     },
 
     handleSelectProject(projectId: string) {
-      this.$emit('switch-project', projectId)
+      // 暂时禁用点击切换项目tab的功能
+      // this.$emit('switch-project', projectId)
     },
 
     openAddModal() {

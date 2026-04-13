@@ -100,6 +100,16 @@ export const getHomeDir = () =>
 export const readDirectory = (path: string, showHidden: boolean) =>
   window.electronAPI.invoke<string[]>('read-directory', path, showHidden)
 
+export interface DirEntryInfo {
+  name: string
+  path: string
+  isDirectory: boolean
+  isGitIgnored: boolean
+}
+
+export const readDirectoryBatch = (path: string, showHidden: boolean): Promise<DirEntryInfo[]> =>
+  window.electronAPI.invoke<DirEntryInfo[]>('read-directory-batch', path, showHidden)
+
 export const isDirectory = (path: string) =>
   window.electronAPI.invoke<boolean>('is-directory', path)
 
@@ -117,6 +127,9 @@ export const pasteFile = (targetDir: string, clipboardPath: string) =>
 
 export const killPort = (port: number) =>
   window.electronAPI.invoke<string>('kill-port', port)
+
+export const isGitIgnored = (path: string) =>
+  window.electronAPI.invoke<boolean>('is-git-ignored', path)
 
 // 搜索相关
 export const searchInDirectory = (dirPath: string, query: string) =>

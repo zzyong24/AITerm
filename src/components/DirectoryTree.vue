@@ -14,7 +14,7 @@
       @expand="onExpand"
     >
       <template #title="{ dataRef }">
-        <span class="tree-node-title" :data-path="dataRef.path" @contextmenu="(e) => onNodeContextMenu(e, dataRef.path)">{{ dataRef.title }}</span>
+        <span class="tree-node-title" :class="{ 'git-ignored': dataRef.isGitIgnored }" :data-path="dataRef.path" @contextmenu="(e) => onNodeContextMenu(e, dataRef.path)">{{ dataRef.title }}</span>
       </template>
     </a-tree>
 
@@ -58,8 +58,7 @@
 import { defineComponent } from 'vue'
 import { Tree } from 'ant-design-vue'
 import {
-  isDirectory as apiIsDirectory,
-  readDirectory as apiReadDirectory,
+  readDirectoryBatch,
   readFile as apiReadFile,
   openProjectInEditor as apiOpenProjectInEditor,
   deletePath as apiDeletePath
@@ -72,6 +71,7 @@ interface TreeNode {
   key: string
   path: string
   isDirectory: boolean
+  isGitIgnored?: boolean
   children?: TreeNode[]
   loading?: boolean
 }
@@ -124,14 +124,9 @@ export default defineComponent({
     async loadTree() {
       this.loading = true
       try {
-        const isDir = await apiIsDirectory(this.rootPath)
-        if (isDir) {
-          const children = await this.readDirectory(this.rootPath)
-          // 直接设置 children 为 treeData，不要根节点
-          this.treeData = children
-          // 默认全部折叠
-          this.expandedKeys = []
-        }
+        const children = await this.readDirectory(this.rootPath)
+        this.treeData = children
+        this.expandedKeys = []
       } catch (e) {
         console.error('Failed to load tree:', e)
       } finally {
@@ -141,29 +136,17 @@ export default defineComponent({
 
     async readDirectory(dirPath: string): Promise<TreeNode[]> {
       try {
-        const entries = await apiReadDirectory(dirPath, true)
-        const nodes: TreeNode[] = []
+        const entries = await readDirectoryBatch(dirPath, true)
 
-        for (const entry of entries) {
-          const fullPath = dirPath.endsWith('/') ? `${dirPath}${entry}` : `${dirPath}/${entry}`
-          const isDir = await apiIsDirectory(fullPath)
-
-          nodes.push({
-            title: entry,
-            key: fullPath,
-            path: fullPath,
-            isDirectory: isDir,
-            children: isDir ? [] : undefined,
-            isLeaf: !isDir
-          })
-        }
-
-        // 排序：目录在前，文件在后
-        return nodes.sort((a, b) => {
-          if (a.isDirectory && !b.isDirectory) return -1
-          if (!a.isDirectory && b.isDirectory) return 1
-          return a.title.localeCompare(b.title)
-        })
+        return entries.map(entry => ({
+          title: entry.name,
+          key: entry.path,
+          path: entry.path,
+          isDirectory: entry.isDirectory,
+          isGitIgnored: entry.isGitIgnored,
+          children: entry.isDirectory ? [] : undefined,
+          isLeaf: !entry.isDirectory
+        }))
       } catch (e) {
         console.error('Failed to read directory:', e)
         return []
@@ -323,6 +306,11 @@ export default defineComponent({
 .tree-node-title {
   display: inline-block;
   width: 100%;
+}
+
+.tree-node-title.git-ignored {
+  opacity: 0.5;
+  text-decoration: line-through;
 }
 
 /* 自定义 tree 样式 */

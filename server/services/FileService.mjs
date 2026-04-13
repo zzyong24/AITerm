@@ -23,6 +23,51 @@ export class FileService {
     }
   }
 
+  async readDirectoryBatch(dirPath, showHidden) {
+    try {
+      const entries = readdirSync(dirPath)
+      const filtered = entries.filter((name) => {
+        if (!showHidden && (name.startsWith('.') || name === 'node_modules')) {
+          return false
+        }
+        return true
+      })
+
+      const results = []
+      for (const name of filtered) {
+        const fullPath = dirPath.endsWith('/') ? `${dirPath}${name}` : `${dirPath}/${name}`
+        let isDir = false
+        let isGitIgnored = false
+        let size = 0
+        try {
+          const stat = statSync(fullPath)
+          isDir = stat.isDirectory()
+          size = stat.size
+        } catch {}
+        try {
+          isGitIgnored = this.isGitIgnored(fullPath)
+        } catch {}
+        results.push({
+          name,
+          path: fullPath,
+          isDirectory: isDir,
+          isGitIgnored,
+          size
+        })
+      }
+
+      // 排序：目录在前，文件在后
+      return results.sort((a, b) => {
+        if (a.isDirectory && !b.isDirectory) return -1
+        if (!a.isDirectory && b.isDirectory) return 1
+        return a.name.localeCompare(b.name)
+      })
+    } catch (e) {
+      console.error(`Failed to read directory batch ${dirPath}:`, e)
+      throw e
+    }
+  }
+
   isDirectory(path) {
     try {
       return statSync(path).isDirectory()
@@ -126,6 +171,26 @@ export class FileService {
     } catch (e) {
       console.error(`Failed to kill port ${port}:`, e)
       throw e
+    }
+  }
+
+  isGitIgnored(path) {
+    try {
+      const gitDir = execSync(`git -C "${path}" rev-parse --show-toplevel 2>/dev/null`, {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe']
+      }).trim()
+
+      if (!gitDir) return false
+
+      const result = execSync(`git check-ignore "${path}"`, {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        cwd: gitDir
+      })
+      return result.trim().length > 0
+    } catch {
+      return false
     }
   }
 

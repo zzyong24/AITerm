@@ -94,7 +94,8 @@ export default defineComponent({
       outputUnsubscribe: null as (() => void) | null,
       closedUnsubscribe: null as (() => void) | null,
       userScrolledAway: false, // 用户是否向上滚动了，查看历史内容
-      resizeObserver: null as ResizeObserver | null
+      resizeObserver: null as ResizeObserver | null,
+      scrollResetTimer: null as number | null // 定时器，用于延迟重置滚动状态
     }
   },
 
@@ -121,6 +122,8 @@ export default defineComponent({
       }
 
       this.id = newVal
+      // 切换会话时重置滚动状态
+      this.userScrolledAway = false
 
       // 订阅新会话
       if (this.terminal) {
@@ -181,6 +184,11 @@ export default defineComponent({
       this.closedUnsubscribe = null
     }
 
+    if (this.scrollResetTimer !== null) {
+      clearTimeout(this.scrollResetTimer)
+      this.scrollResetTimer = null
+    }
+
     if (this.terminal) {
       try {
         this.terminal.dispose()
@@ -232,14 +240,37 @@ export default defineComponent({
           resizeTerminal(this.id, rows, cols)
         })
 
-        // 监听滚动事件，检测用户是否向上滚动查看历史
-        this.terminal.onScroll(() => {
+        // 监听用户滚动事件，检测用户是否向上滚动查看历史
+        // 使用 wheel 事件而不是 onScroll，因为 onScroll 会被程序滚动触发
+        this.terminal.element?.addEventListener('wheel', (e: WheelEvent) => {
           if (!this.terminal) return
-          const viewport = this.terminal.element?.querySelector('.xterm-viewport') as HTMLElement
-          if (viewport) {
-            // 如果滚动条不在最底部，说明用户在查看历史
-            const isAtBottom = Math.abs(viewport.scrollTop - (viewport.scrollHeight - viewport.clientHeight)) < 5
-            this.userScrolledAway = !isAtBottom
+          const viewport = this.terminal.element.querySelector('.xterm-viewport') as HTMLElement
+          if (!viewport) return
+
+          // 检查当前是否在底部
+          const maxScroll = viewport.scrollHeight - viewport.clientHeight
+          const isAtBottom = maxScroll <= 0 || Math.abs(viewport.scrollTop - maxScroll) < 5
+
+          if (e.deltaY < 0) {
+            // 向上滚动
+            this.userScrolledAway = true
+            // 取消之前的重置定时器
+            if (this.scrollResetTimer !== null) {
+              clearTimeout(this.scrollResetTimer)
+              this.scrollResetTimer = null
+            }
+            // 设置定时器，3秒后自动重置滚动状态
+            this.scrollResetTimer = window.setTimeout(() => {
+              this.userScrolledAway = false
+              this.scrollResetTimer = null
+            }, 3000)
+          } else if (isAtBottom) {
+            // 向下滚动且已到达底部，重置状态
+            this.userScrolledAway = false
+            if (this.scrollResetTimer !== null) {
+              clearTimeout(this.scrollResetTimer)
+              this.scrollResetTimer = null
+            }
           }
         })
 
@@ -366,7 +397,7 @@ export default defineComponent({
 
 .terminal-container :deep(.xterm-screen) {
   overflow: hidden;
-  padding-bottom: 200px;
+  padding-bottom: 100px;
 }
 
 .terminal-container :deep(.xterm-screen canvas) {

@@ -173,6 +173,15 @@ class AppBusinessClass {
     this.notifyProjectsChange()
   }
 
+  async refreshProjects(): Promise<void> {
+    try {
+      this.projects = await apiGetProjects()
+      this.notifyProjectsChange()
+    } catch (err) {
+      console.error('Failed to refresh projects:', err)
+    }
+  }
+
   renameProject(id: string, newName: string): Project | null {
     const project = this.projects.find(p => p.id === id)
     if (project) {
