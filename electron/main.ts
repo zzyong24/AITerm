@@ -201,6 +201,10 @@ function registerIpcHandlers() {
     return await fileService.readDirectory(path, showHidden)
   })
 
+  ipcMain.handle('read-directory-batch', async (_, path: string, showHidden: boolean) => {
+    return await fileService.readDirectoryBatch(path, showHidden)
+  })
+
   ipcMain.handle('is-directory', async (_, path: string) => {
     return fileService.isDirectory(path)
   })
@@ -209,12 +213,24 @@ function registerIpcHandlers() {
     await fileService.deletePath(path)
   })
 
+  ipcMain.handle('read-file', async (_, path: string) => {
+    return await fileService.readFile(path)
+  })
+
+  ipcMain.handle('write-file', async (_, path: string, content: string) => {
+    await fileService.writeFile(path, content)
+  })
+
   ipcMain.handle('paste-file', async (_, targetDir: string, clipboardPath: string) => {
     await fileService.pasteFile(targetDir, clipboardPath)
   })
 
   ipcMain.handle('kill-port', async (_, port: number) => {
     return await fileService.killPort(port)
+  })
+
+  ipcMain.handle('is-git-ignored', async (_, path: string) => {
+    return fileService.isGitIgnored(path)
   })
 
   // 搜索相关

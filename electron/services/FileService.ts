@@ -31,6 +31,47 @@ export class FileService {
     }
   }
 
+  async readDirectoryBatch(dirPath: string, showHidden: boolean): Promise<{ name: string; path: string; isDirectory: boolean; isGitIgnored: boolean }[]> {
+    try {
+      const entries = readdirSync(dirPath)
+      const filtered = entries.filter((name) => {
+        if (!showHidden && (name.startsWith('.') || name === 'node_modules')) {
+          return false
+        }
+        return true
+      })
+
+      const results = []
+      for (const name of filtered) {
+        const fullPath = dirPath.endsWith('/') ? `${dirPath}${name}` : `${dirPath}/${name}`
+        let isDir = false
+        let isGitIgnored = false
+        try {
+          isDir = statSync(fullPath).isDirectory()
+        } catch {}
+        try {
+          isGitIgnored = this.isGitIgnored(fullPath)
+        } catch {}
+        results.push({
+          name,
+          path: fullPath,
+          isDirectory: isDir,
+          isGitIgnored
+        })
+      }
+
+      // 排序：目录在前，文件在后
+      return results.sort((a, b) => {
+        if (a.isDirectory && !b.isDirectory) return -1
+        if (!a.isDirectory && b.isDirectory) return 1
+        return a.name.localeCompare(b.name)
+      })
+    } catch (e) {
+      log.error(`Failed to read directory batch ${dirPath}:`, e)
+      throw e
+    }
+  }
+
   isDirectory(path: string): boolean {
     try {
       return statSync(path).isDirectory()
@@ -101,6 +142,28 @@ export class FileService {
       } else {
         copyFileSync(srcPath, dstPath)
       }
+    }
+  }
+
+  isGitIgnored(path: string): boolean {
+    try {
+      // 先找到git仓库根目录
+      const gitDir = execSync(`git -C "${path}" rev-parse --show-toplevel 2>/dev/null`, {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe']
+      }).trim()
+
+      if (!gitDir) return false
+
+      // 在git仓库根目录执行check-ignore
+      const result = execSync(`git check-ignore "${path}"`, {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        cwd: gitDir
+      })
+      return result.trim().length > 0
+    } catch {
+      return false
     }
   }
 
@@ -255,6 +318,24 @@ export class FileService {
       previewLines.push(`${lineNum}: ${displayLine}`)
     }
 
-    return previewLines.join('\n')
+return previewLines.join('\n')
+  }
+
+  async readFile(path: string): Promise<string> {
+    try {
+      return readFileSync(path, 'utf-8')
+    } catch (e) {
+      log.error(`Failed to read file ${path}:`, e)
+      throw e
+    }
+  }
+
+async writeFile(path: string, content: string): Promise<void> {
+    try {
+      writeFileSync(path, content, 'utf-8')
+    } catch (e) {
+      log.error(`Failed to write file ${path}:`, e)
+      throw e
+    }
   }
 }
