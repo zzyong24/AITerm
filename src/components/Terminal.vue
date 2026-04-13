@@ -352,6 +352,7 @@ export default defineComponent({
 
 .terminal-container :deep(.xterm-screen) {
   overflow: hidden;
+  margin-bottom: -50px;
 }
 
 .terminal-container :deep(.xterm-screen canvas) {
