@@ -93,7 +93,8 @@ export default defineComponent({
       fitAddon: null as FitAddon | null,
       outputUnsubscribe: null as (() => void) | null,
       closedUnsubscribe: null as (() => void) | null,
-      userScrolledAway: false // 用户是否向上滚动了，查看历史内容
+      userScrolledAway: false, // 用户是否向上滚动了，查看历史内容
+      resizeObserver: null as ResizeObserver | null
     }
   },
 
@@ -152,11 +153,23 @@ export default defineComponent({
       }
     })
 
-    window.addEventListener('resize', this.handleResize)
+    // 使用 ResizeObserver 监听容器大小变化，比 window resize 更准确
+    this.resizeObserver = new ResizeObserver(() => {
+      if (this.isActive) {
+        this.handleResize()
+      }
+    })
+    const container = this.$refs.terminalContainer as HTMLElement
+    if (container) {
+      this.resizeObserver.observe(container)
+    }
   },
 
   beforeUnmount() {
-    window.removeEventListener('resize', this.handleResize)
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect()
+      this.resizeObserver = null
+    }
 
     if (this.outputUnsubscribe) {
       this.outputUnsubscribe()
@@ -261,7 +274,9 @@ export default defineComponent({
 
     handleResize() {
       if (this.isActive) {
-        this.fit()
+        this.$nextTick(() => {
+          this.fit()
+        })
       }
     },
 
@@ -351,7 +366,7 @@ export default defineComponent({
 
 .terminal-container :deep(.xterm-screen) {
   overflow: hidden;
-  padding-bottom: 100px;
+  padding-bottom: 200px;
 }
 
 .terminal-container :deep(.xterm-screen canvas) {
