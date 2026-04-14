@@ -153,9 +153,9 @@ export default defineComponent({
       }
     },
 
-    confirmCloseProject() {
+    async confirmCloseProject() {
       if (this.pendingCloseProjectId) {
-        appBusiness.closeProjectTab(this.pendingCloseProjectId)
+        await appBusiness.closeProjectTab(this.pendingCloseProjectId)
       }
       this.closeConfirmModal = false
       this.pendingCloseProjectId = null

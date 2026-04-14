@@ -183,6 +183,11 @@ class AppBusinessClass {
   }
 
   async removeProject(id: string) {
+    // 先关闭该项目关联的所有终端
+    const projectSessions = this.sessions.filter(s => s.projectId === id)
+    for (const session of projectSessions) {
+      await this.closeSession(session.id)
+    }
     await apiRemoveProject(id)
     this.projects = this.projects.filter(p => p.id !== id)
     this.notifyProjectsChange()
@@ -230,17 +235,17 @@ class AppBusinessClass {
   }
 
   // 关闭项目Tab
-  closeProjectTab(projectId: string) {
+  async closeProjectTab(projectId: string) {
     const tab = this.tabs.find(t => t.projectId === projectId)
     if (!tab) return
 
     // 保存终端列表
-    this.saveProjectTerminals(projectId)
+    await this.saveProjectTerminals(projectId)
 
     // 关闭所有终端和编辑器
     for (const item of tab.items) {
       if (item.type === 'terminal') {
-        this.closeSession(item.id)
+        await this.closeSession(item.id)
       } else {
         this.closeEditor(item.id)
       }

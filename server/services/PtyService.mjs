@@ -1,6 +1,7 @@
 import * as pty from 'node-pty'
 import { EventEmitter } from 'events'
 import { v4 as uuidv4 } from 'uuid'
+import { execSync } from 'child_process'
 
 export class PtyService extends EventEmitter {
   constructor() {
@@ -89,15 +90,51 @@ export class PtyService extends EventEmitter {
     }
   }
 
+  killProcessTree(pid) {
+    try {
+      if (process.platform === 'win32') {
+        execSync(`taskkill /T /F /PID ${pid}`)
+      } else {
+        const killChildren = (parentPid) => {
+          try {
+            const output = execSync(`ps -o pid= -ppid ${parentPid}`).toString()
+            const childPids = output.trim().split('\n').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n))
+            for (const childPid of childPids) {
+              killChildren(childPid)
+              try {
+                process.kill(childPid, 'SIGKILL')
+              } catch (e) {
+                // ignore
+              }
+            }
+          } catch (e) {
+            // no children
+          }
+        }
+        killChildren(pid)
+        try {
+          process.kill(pid, 'SIGKILL')
+        } catch (e) {
+          // ignore
+        }
+      }
+    } catch (e) {
+      console.warn(`Failed to kill process tree for ${pid}:`, e)
+    }
+  }
+
   async close(sessionId) {
     const session = this.sessions.get(sessionId)
     if (session) {
       try {
+        // 先杀灭整个进程树，防止子进程（如 dev server）残留
+        this.killProcessTree(session.pty.pid)
         session.pty.kill()
-        this.sessions.delete(sessionId)
         console.log(`Closed session ${sessionId}`)
       } catch (e) {
         console.error(`Failed to close session ${sessionId}:`, e)
+      } finally {
+        this.sessions.delete(sessionId)
       }
     }
   }
@@ -105,6 +142,7 @@ export class PtyService extends EventEmitter {
   closeAll() {
     for (const [sessionId, session] of this.sessions) {
       try {
+        this.killProcessTree(session.pty.pid)
         session.pty.kill()
         console.log(`Closed session ${sessionId}`)
       } catch (e) {

@@ -2,6 +2,7 @@ import * as pty from 'node-pty'
 import { EventEmitter } from 'events'
 import { v4 as uuidv4 } from 'uuid'
 import log from 'electron-log'
+import { execSync } from 'child_process'
 
 export interface SessionInfo {
   id: string
@@ -116,12 +117,47 @@ export class PtyService extends EventEmitter {
     }
   }
 
+  private killProcessTree(pid: number): void {
+    try {
+      if (process.platform === 'win32') {
+        execSync(`taskkill /T /F /PID ${pid}`)
+      } else {
+        // 递归杀灭子进程
+        const killChildren = (parentPid: number) => {
+          try {
+            const output = execSync(`ps -o pid= -ppid ${parentPid}`).toString()
+            const childPids = output.trim().split('\n').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n))
+            for (const childPid of childPids) {
+              killChildren(childPid)
+              try {
+                process.kill(childPid, 'SIGKILL')
+              } catch (e) {
+                // ignore
+              }
+            }
+          } catch (e) {
+            // no children
+          }
+        }
+        killChildren(pid)
+        try {
+          process.kill(pid, 'SIGKILL')
+        } catch (e) {
+          // ignore
+        }
+      }
+    } catch (e) {
+      log.warn(`Failed to kill process tree for ${pid}:`, e)
+    }
+  }
+
   async close(sessionId: string): Promise<void> {
     const session = this.sessions.get(sessionId)
     if (session) {
       try {
-        // 检查 PTY 是否已退出
+        // 先杀灭整个进程树，防止子进程（如 dev server）残留
         if ((session.pty as any).exitCode === null) {
+          this.killProcessTree(session.pty.pid)
           session.pty.kill()
         }
         log.info(`Closed session ${sessionId}`)
@@ -137,6 +173,7 @@ export class PtyService extends EventEmitter {
     for (const [sessionId, session] of this.sessions) {
       try {
         if ((session.pty as any).exitCode === null) {
+          this.killProcessTree(session.pty.pid)
           session.pty.kill()
         }
         log.info(`Closed session ${sessionId}`)

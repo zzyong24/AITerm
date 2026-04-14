@@ -69,17 +69,17 @@ describe('AppBusiness - 数据驱动UI', () => {
       expect(appBusiness.activeProjectId).toBe('proj2')
     })
 
-    it('should close project tab', () => {
+    it('should close project tab', async () => {
       appBusiness.ensureProjectTab('proj1', 'P1')
-      appBusiness.closeProjectTab('proj1')
+      await appBusiness.closeProjectTab('proj1')
       expect(appBusiness.tabs.length).toBe(0)
     })
 
-    it('should switch to first tab when closing active', () => {
+    it('should switch to first tab when closing active', async () => {
       appBusiness.ensureProjectTab('proj1', 'P1')
       appBusiness.ensureProjectTab('proj2', 'P2')
       appBusiness.activeProjectId = 'proj2'
-      appBusiness.closeProjectTab('proj2')
+      await appBusiness.closeProjectTab('proj2')
       expect(appBusiness.activeProjectId).toBe('proj1')
     })
   })

@@ -101,7 +101,10 @@ export class GitService {
   async commit(repoPath: string, message: string): Promise<GitOperationResult> {
     try {
       const git: SimpleGit = simpleGit(repoPath)
-      await git.commit(message)
+      const result = await git.commit(message)
+      if (!result.commit || result.summary.changes === 0) {
+        return { success: false, message: '没有要提交的更改，请先暂存文件' }
+      }
       log.info(`Committed with message: ${message}`)
       return { success: true, message: `已提交: ${message}` }
     } catch (e) {

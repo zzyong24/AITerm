@@ -1449,7 +1449,6 @@ async loadGitStatus(project: Project) {
 .git-project-info {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
 }
 
@@ -1459,11 +1458,19 @@ async loadGitStatus(project: Project) {
   color: #fff;
   border-radius: 4px;
   font-size: 11px;
+  flex-shrink: 0;
 }
 
 .git-project-name {
   color: #d4d4d4;
   font-size: 13px;
+  flex: 1;
+  min-width: 0;
+}
+
+.git-refresh {
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .git-changes {
