@@ -11,6 +11,7 @@
     "build:frontend": "vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
     "build:mac": "vite build && tsc -p tsconfig.electron.json && electron-builder --mac",
+    "build:win": "vite build && tsc -p tsconfig.electron.json && electron-builder --win",
     "start": "node dist-server/index.js",
     "electron": "electron .",
     "test": "vitest run",
@@ -33,7 +34,16 @@
       "target": [
         "dir"
       ]
-    }
+    },
+    "win": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "npmRebuild": false
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.1",

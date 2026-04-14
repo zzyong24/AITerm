@@ -9,8 +9,11 @@ import {
   getProjects as apiGetProjects,
   getHomeDir as apiGetHomeDir,
   getEditorPath as apiGetEditorPath,
+  setEditorPath as apiSetEditorPath,
   addProject as apiAddProject,
-  removeProject as apiRemoveProject
+  removeProject as apiRemoveProject,
+  saveTerminals as apiSaveTerminals,
+  loadTerminals as apiLoadTerminals
 } from '../api'
 
 export interface Project {
@@ -151,6 +154,7 @@ class AppBusinessClass {
   setEditorPath(path: string) {
     this.editorPath = path
     this.notifySettingsChange()
+    apiSetEditorPath(path)
   }
 
   // ============ UI状态（驱动Tabs） ============
@@ -218,6 +222,9 @@ class AppBusinessClass {
   closeProjectTab(projectId: string) {
     const tab = this.tabs.find(t => t.projectId === projectId)
     if (!tab) return
+
+    // 保存终端列表
+    this.saveProjectTerminals(projectId)
 
     // 关闭所有终端和编辑器
     for (const item of tab.items) {
@@ -362,6 +369,47 @@ class AppBusinessClass {
     this.notifyActiveProjectChange(projectId)
     this.notifyTabsChange()
     return sessionId
+  }
+
+  // ============ 终端列表保存/恢复 ============
+  async saveProjectTerminals(projectId: string): Promise<void> {
+    const project = this.projects.find(p => p.id === projectId)
+    if (!project) return
+
+    const projectSessions = this.sessions.filter(s => s.projectId === projectId)
+    const terminals = projectSessions.map(s => ({ workingDir: s.workingDir }))
+
+    try {
+      await apiSaveTerminals(project.path, terminals)
+      console.log('[Terminals] Saved terminals for project:', project.name, terminals)
+    } catch (e) {
+      console.error('[Terminals] Failed to save terminals:', e)
+    }
+  }
+
+  async loadProjectTerminals(projectId: string): Promise<void> {
+    const project = this.projects.find(p => p.id === projectId)
+    if (!project) return
+
+    try {
+      const terminals = await apiLoadTerminals(project.path)
+      console.log('[Terminals] Loaded terminals for project:', project.name, terminals)
+
+      if (terminals.length === 0) return
+
+      // 先关闭现有的项目终端（用户要恢复保存的列表）
+      const existingSessions = this.sessions.filter(s => s.projectId === projectId)
+      for (const session of existingSessions) {
+        await this.closeSession(session.id)
+      }
+
+      // 为每个终端创建会话
+      for (const terminal of terminals) {
+        await this.launchTerminal(projectId, project.name, terminal.workingDir)
+      }
+    } catch (e) {
+      console.error('[Terminals] Failed to load terminals:', e)
+    }
   }
 
   // ============ 编辑器 ============

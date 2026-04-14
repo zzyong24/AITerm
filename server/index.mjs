@@ -199,6 +199,67 @@ app.post('/api/kill-port', async (req, res) => {
   }
 })
 
+app.post('/api/save-terminal-history', async (req, res) => {
+  try {
+    const { projectPath, workingDir, entries } = req.body
+    fileService.saveTerminalHistory(projectPath, workingDir, entries)
+    res.json({ success: true })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.get('/api/load-terminal-history', async (req, res) => {
+  try {
+    const { projectPath, workingDir } = req.query
+    const entries = fileService.loadTerminalHistory(projectPath, workingDir)
+    res.json(entries)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.post('/api/clear-terminal-history', async (req, res) => {
+  try {
+    const { projectPath, workingDir } = req.body
+    fileService.clearTerminalHistory(projectPath, workingDir)
+    res.json({ success: true })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// 终端列表保存/恢复
+app.post('/api/save-terminals', async (req, res) => {
+  try {
+    const { projectPath, terminals } = req.body
+    fileService.saveTerminals(projectPath, terminals)
+    res.json({ success: true })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.get('/api/load-terminals', async (req, res) => {
+  try {
+    const { projectPath } = req.query
+    const terminals = fileService.loadTerminals(projectPath)
+    res.json(terminals)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.delete('/api/terminals', async (req, res) => {
+  try {
+    const { projectPath } = req.body
+    fileService.clearTerminals(projectPath)
+    res.json({ success: true })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
 app.post('/api/is-git-ignored', async (req, res) => {
   try {
     const { path } = req.body

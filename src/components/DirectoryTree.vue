@@ -14,7 +14,7 @@
       @expand="onExpand"
     >
       <template #title="{ dataRef }">
-        <span class="tree-node-title" :class="{ 'git-ignored': dataRef.isGitIgnored }" :data-path="dataRef.path" @contextmenu="(e) => onNodeContextMenu(e, dataRef.path)">{{ dataRef.title }}</span>
+        <span class="tree-node-title" :class="{ 'git-ignored': dataRef.isGitIgnored }" :data-path="dataRef.path" @contextmenu="(e) => onNodeContextMenu(e, dataRef.path, dataRef.isDirectory)">{{ dataRef.title }}</span>
       </template>
     </a-tree>
 
@@ -26,8 +26,9 @@
       @click.stop
     >
       <div class="context-menu-item" @click="handleOpenTerminal">打开到终端</div>
+      <div class="context-menu-item" v-if="contextMenu.isDirectory" @click="handleSearchInDirectory">在目录中搜索</div>
       <div class="context-menu-separator" />
-      <div class="context-menu-item" @click="handleEditFile">编辑</div>
+      <div class="context-menu-item" v-if="!contextMenu.isDirectory" @click="handleEditFile">编辑</div>
       <div class="context-menu-item" @click="handleOpenInEditor">在编辑器中打开</div>
       <div class="context-menu-separator" />
       <div class="context-menu-item danger" @click="handleDelete">删除</div>
@@ -90,7 +91,7 @@ export default defineComponent({
     }
   },
 
-  emits: ['node-click', 'open-editor', 'open-terminal'],
+  emits: ['node-click', 'open-editor', 'open-terminal', 'search-in-directory'],
 
   data() {
     return {
@@ -103,7 +104,8 @@ export default defineComponent({
         visible: false,
         x: 0,
         y: 0,
-        path: ''
+        path: '',
+        isDirectory: false
       },
       showConfirm: false,
       pathToDelete: ''
@@ -180,7 +182,7 @@ export default defineComponent({
       })
     },
 
-    onNodeContextMenu(e: MouseEvent, path: string) {
+    onNodeContextMenu(e: MouseEvent, path: string, isDirectory: boolean) {
       e.preventDefault()
       e.stopPropagation()
 
@@ -190,7 +192,8 @@ export default defineComponent({
         visible: true,
         x: e.clientX,
         y: e.clientY,
-        path
+        path,
+        isDirectory
       }
 
       // 调整菜单位置确保不超出屏幕
@@ -233,6 +236,11 @@ export default defineComponent({
       } catch (e) {
         alert(`打开编辑器失败: ${e}`)
       }
+      this.closeContextMenu()
+    },
+
+    handleSearchInDirectory() {
+      this.$emit('search-in-directory', this.contextMenu.path)
       this.closeContextMenu()
     },
 

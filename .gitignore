@@ -27,3 +27,6 @@ npm-debug.log*
 
 # TypeScript cache
 *.tsbuildinfo
+
+# Local data
+.aiterm/

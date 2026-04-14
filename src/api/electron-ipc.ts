@@ -168,6 +168,32 @@ export const gitPull = (repoPath: string) =>
 export const gitDiscardChanges = (repoPath: string, filePath: string) =>
   window.electronAPI.invoke<GitOperationResult>('git-discard-changes', repoPath, filePath)
 
+// 终端历史
+export interface HistoryEntry {
+  type: 'input' | 'output'
+  content: string
+  timestamp: number
+}
+
+export const saveTerminalHistory = (projectPath: string, workingDir: string, entries: HistoryEntry[]) =>
+  window.electronAPI.invoke('save-terminal-history', projectPath, workingDir, entries)
+
+export const loadTerminalHistory = (projectPath: string, workingDir: string): Promise<HistoryEntry[]> =>
+  window.electronAPI.invoke<HistoryEntry[]>('load-terminal-history', projectPath, workingDir)
+
+export const clearTerminalHistory = (projectPath: string, workingDir: string) =>
+  window.electronAPI.invoke('clear-terminal-history', projectPath, workingDir)
+
+// 终端列表保存/恢复
+export const saveTerminals = (projectPath: string, terminals: { workingDir: string }[]) =>
+  window.electronAPI.invoke('save-terminals', projectPath, terminals)
+
+export const loadTerminals = (projectPath: string): Promise<{ workingDir: string }[]> =>
+  window.electronAPI.invoke<{ workingDir: string }[]>('load-terminals', projectPath)
+
+export const clearTerminals = (projectPath: string) =>
+  window.electronAPI.invoke('clear-terminals', projectPath)
+
 // WebSocket 监听 - Electron IPC 模式使用事件
 export const terminalOutputListener = (callback: (data: { session_id: string; data: number[] }) => void) => {
   return window.electronAPI.on('terminal-output', callback)

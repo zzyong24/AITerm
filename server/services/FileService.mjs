@@ -194,6 +194,118 @@ export class FileService {
     }
   }
 
+  // ============ 终端历史 ============
+  getHistoryDir(projectPath) {
+    return join(projectPath, '.aiterm')
+  }
+
+  getHistoryFilePath(projectPath) {
+    return join(this.getHistoryDir(projectPath), 'terminal-history.json')
+  }
+
+  saveTerminalHistory(projectPath, workingDir, entries) {
+    try {
+      const historyDir = this.getHistoryDir(projectPath)
+      if (!existsSync(historyDir)) {
+        mkdirSync(historyDir, { recursive: true })
+      }
+      const historyFile = this.getHistoryFilePath(projectPath)
+      // 读取现有历史
+      let existingHistory = []
+      if (existsSync(historyFile)) {
+        try {
+          existingHistory = JSON.parse(readFileSync(historyFile, 'utf-8'))
+        } catch {}
+      }
+      // 更新当前目录的历史
+      const dirIndex = existingHistory.findIndex(h => h.dir === workingDir)
+      if (dirIndex >= 0) {
+        existingHistory[dirIndex].entries = entries.slice(-1000)
+      } else {
+        existingHistory.push({ dir: workingDir, entries: entries.slice(-1000) })
+      }
+      // 限制只保存20个目录的历史
+      if (existingHistory.length > 20) {
+        existingHistory = existingHistory.slice(-20)
+      }
+      writeFileSync(historyFile, JSON.stringify(existingHistory), 'utf-8')
+    } catch (e) {
+      console.error(`Failed to save terminal history:`, e)
+    }
+  }
+
+  loadTerminalHistory(projectPath, workingDir) {
+    try {
+      const historyFile = this.getHistoryFilePath(projectPath)
+      if (!existsSync(historyFile)) {
+        return []
+      }
+      const content = readFileSync(historyFile, 'utf-8')
+      const history = JSON.parse(content)
+      const dirHistory = history.find(h => h.dir === workingDir)
+      return dirHistory?.entries || []
+    } catch (e) {
+      console.error(`Failed to load terminal history:`, e)
+      return []
+    }
+  }
+
+  clearTerminalHistory(projectPath, workingDir) {
+    try {
+      const historyFile = this.getHistoryFilePath(projectPath)
+      if (!existsSync(historyFile)) return
+      let history = JSON.parse(readFileSync(historyFile, 'utf-8'))
+      history = history.filter(h => h.dir !== workingDir)
+      writeFileSync(historyFile, JSON.stringify(history), 'utf-8')
+    } catch (e) {
+      console.error(`Failed to clear terminal history:`, e)
+    }
+  }
+
+  // ============ 终端列表保存/恢复 ============
+  getTerminalsFilePath(projectPath) {
+    return join(this.getHistoryDir(projectPath), 'terminals.json')
+  }
+
+  saveTerminals(projectPath, terminals) {
+    try {
+      const historyDir = this.getHistoryDir(projectPath)
+      if (!existsSync(historyDir)) {
+        mkdirSync(historyDir, { recursive: true })
+      }
+      const terminalsFile = this.getTerminalsFilePath(projectPath)
+      writeFileSync(terminalsFile, JSON.stringify({ projectPath, terminals }), 'utf-8')
+    } catch (e) {
+      console.error(`Failed to save terminals:`, e)
+    }
+  }
+
+  loadTerminals(projectPath) {
+    try {
+      const terminalsFile = this.getTerminalsFilePath(projectPath)
+      if (!existsSync(terminalsFile)) {
+        return []
+      }
+      const content = readFileSync(terminalsFile, 'utf-8')
+      const data = JSON.parse(content)
+      return data.terminals || []
+    } catch (e) {
+      console.error(`Failed to load terminals:`, e)
+      return []
+    }
+  }
+
+  clearTerminals(projectPath) {
+    try {
+      const terminalsFile = this.getTerminalsFilePath(projectPath)
+      if (existsSync(terminalsFile)) {
+        unlinkSync(terminalsFile)
+      }
+    } catch (e) {
+      console.error(`Failed to clear terminals:`, e)
+    }
+  }
+
   async readFile(filePath) {
     try {
       const content = readFileSync(filePath, 'utf-8')

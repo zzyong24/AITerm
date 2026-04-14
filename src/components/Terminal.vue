@@ -47,7 +47,7 @@ import { defineComponent } from 'vue'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
-import { terminalOutputListener, terminalClosedListener, writeToTerminal, resizeTerminal } from '../api'
+import { terminalOutputListener, terminalClosedListener, writeToTerminal, resizeTerminal, saveTerminalHistory, loadTerminalHistory } from '../api'
 import { appBusiness } from '../store/AppBusiness'
 
 export default defineComponent({
@@ -93,9 +93,8 @@ export default defineComponent({
       fitAddon: null as FitAddon | null,
       outputUnsubscribe: null as (() => void) | null,
       closedUnsubscribe: null as (() => void) | null,
-      userScrolledAway: false, // 用户是否向上滚动了，查看历史内容
       resizeObserver: null as ResizeObserver | null,
-      scrollResetTimer: null as number | null // 定时器，用于延迟重置滚动状态
+      historyEntries: [] as { type: 'input' | 'output'; content: string; timestamp: number }[]
     }
   },
 
@@ -115,6 +114,9 @@ export default defineComponent({
     sessionId(newVal, oldVal) {
       if (newVal === oldVal) return
 
+      // TODO: 暂时禁用会话历史
+      // this.saveHistory()
+
       // 取消旧会话的订阅
       if (this.outputUnsubscribe) {
         this.outputUnsubscribe()
@@ -122,8 +124,9 @@ export default defineComponent({
       }
 
       this.id = newVal
-      // 切换会话时重置滚动状态
-      this.userScrolledAway = false
+      // TODO: 暂时禁用会话历史
+      // this.historyEntries = []
+      // this.loadHistory()
 
       // 订阅新会话
       if (this.terminal) {
@@ -131,10 +134,12 @@ export default defineComponent({
           if (data.session_id === this.id) {
             const text = new TextDecoder().decode(new Uint8Array(data.data))
             this.terminal?.write(text)
-            // 只有用户没有查看历史时才自动滚动到底部
-            if (!this.userScrolledAway) {
-              this.terminal?.scrollToBottom()
-            }
+            // 记录输出历史
+            this.historyEntries.push({
+              type: 'output',
+              content: text,
+              timestamp: Date.now()
+            })
             // 活跃度跟踪
             appBusiness.addActivity(this.id, data.data.length)
           }
@@ -147,6 +152,10 @@ export default defineComponent({
 
   mounted() {
     this.initTerminal()
+    // TODO: 暂时禁用会话历史
+    // this.$nextTick(() => {
+    //   this.loadHistory()
+    // })
 
     // 监听后端 PTY 退出事件
     this.closedUnsubscribe = terminalClosedListener((data) => {
@@ -169,6 +178,9 @@ export default defineComponent({
   },
 
   beforeUnmount() {
+    // TODO: 暂时禁用会话历史
+    // this.saveHistory()
+
     if (this.resizeObserver) {
       this.resizeObserver.disconnect()
       this.resizeObserver = null
@@ -182,11 +194,6 @@ export default defineComponent({
     if (this.closedUnsubscribe) {
       this.closedUnsubscribe()
       this.closedUnsubscribe = null
-    }
-
-    if (this.scrollResetTimer !== null) {
-      clearTimeout(this.scrollResetTimer)
-      this.scrollResetTimer = null
     }
 
     if (this.terminal) {
@@ -234,54 +241,28 @@ export default defineComponent({
 
         this.terminal.onData((data) => {
           writeToTerminal(this.id, data)
+          // 记录输入历史
+          this.historyEntries.push({
+            type: 'input',
+            content: data,
+            timestamp: Date.now()
+          })
         })
 
         this.terminal.onResize(({ cols, rows }) => {
           resizeTerminal(this.id, rows, cols)
         })
 
-        // 监听用户滚动事件，检测用户是否向上滚动查看历史
-        // 使用 wheel 事件而不是 onScroll，因为 onScroll 会被程序滚动触发
-        this.terminal.element?.addEventListener('wheel', (e: WheelEvent) => {
-          if (!this.terminal) return
-          const viewport = this.terminal.element.querySelector('.xterm-viewport') as HTMLElement
-          if (!viewport) return
-
-          // 检查当前是否在底部
-          const maxScroll = viewport.scrollHeight - viewport.clientHeight
-          const isAtBottom = maxScroll <= 0 || Math.abs(viewport.scrollTop - maxScroll) < 5
-
-          if (e.deltaY < 0) {
-            // 向上滚动
-            this.userScrolledAway = true
-            // 取消之前的重置定时器
-            if (this.scrollResetTimer !== null) {
-              clearTimeout(this.scrollResetTimer)
-              this.scrollResetTimer = null
-            }
-            // 设置定时器，3秒后自动重置滚动状态
-            this.scrollResetTimer = window.setTimeout(() => {
-              this.userScrolledAway = false
-              this.scrollResetTimer = null
-            }, 3000)
-          } else if (isAtBottom) {
-            // 向下滚动且已到达底部，重置状态
-            this.userScrolledAway = false
-            if (this.scrollResetTimer !== null) {
-              clearTimeout(this.scrollResetTimer)
-              this.scrollResetTimer = null
-            }
-          }
-        })
-
         this.outputUnsubscribe = terminalOutputListener((data) => {
           if (data.session_id === this.id) {
             const text = new TextDecoder().decode(new Uint8Array(data.data))
             this.terminal?.write(text)
-            // 只有用户没有查看历史时才自动滚动到底部
-            if (!this.userScrolledAway) {
-              this.terminal?.scrollToBottom()
-            }
+            // 记录输出历史
+            this.historyEntries.push({
+              type: 'output',
+              content: text,
+              timestamp: Date.now()
+            })
             // 活跃度跟踪
             appBusiness.addActivity(this.id, data.data.length)
           }
@@ -317,6 +298,54 @@ export default defineComponent({
 
     handleClose() {
       this.onClose(this.id)
+    },
+
+    async loadHistory() {
+      try {
+        // 等待一小段时间确保会话已创建
+        await new Promise(resolve => setTimeout(resolve, 100))
+
+        const session = appBusiness.sessions.find(s => s.id === this.id)
+        if (!session || !session.projectId) {
+          console.log('[History] Session not found or no projectId:', this.id)
+          return
+        }
+        const project = appBusiness.projects.find(p => p.id === session.projectId)
+        if (!project) {
+          console.log('[History] Project not found for session:', session.projectId)
+          return
+        }
+
+        // 使用工作目录作为历史记录的标识
+        const historyKey = session.workingDir || project.path
+        console.log('[History] Loading history for:', historyKey)
+        const entries = await loadTerminalHistory(project.path, historyKey)
+        console.log('[History] Loaded entries:', entries.length)
+        if (entries.length > 0) {
+          this.historyEntries = entries
+          // 将历史内容写入终端
+          const text = entries.map(e => e.content).join('')
+          this.terminal?.write(text)
+        }
+      } catch (e) {
+        console.warn('Failed to load terminal history:', e)
+      }
+    },
+
+    async saveHistory() {
+      if (this.historyEntries.length === 0) return
+      try {
+        const session = appBusiness.sessions.find(s => s.id === this.id)
+        if (!session || !session.projectId) return
+        const project = appBusiness.projects.find(p => p.id === session.projectId)
+        if (!project) return
+
+        // 使用工作目录作为历史记录的标识
+        const historyKey = session.workingDir || project.path
+        await saveTerminalHistory(project.path, historyKey, this.historyEntries)
+      } catch (e) {
+        console.warn('Failed to save terminal history:', e)
+      }
     }
   }
 })

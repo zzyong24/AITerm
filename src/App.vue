@@ -8,7 +8,7 @@
           @switch-project="handleSwitchProject" @launch="handleLaunch" @open-editor="handleOpenEditor" />
       </aside>
       <div v-if="!sidebarCollapsed" class="sidebar-resizer" @mousedown="startResize"></div>
-      <main class="main-content">
+      <main v-if="localTabs.length > 0" class="main-content">
         <!-- 项目分组标签栏 -->
         <div class="project-tabs">
           <div v-for="tab in localTabs" :key="tab.projectId" class="project-tab"
@@ -34,7 +34,7 @@
 
     <Settings v-if="showSettings" @close="handleToggleSettings" />
 
-    <ConfirmDialog v-if="closeConfirmModal" :message="closeConfirmMessage" @confirm="confirmClose"
+    <ConfirmDialog v-if="closeConfirmModal" :message="closeConfirmMessage" @confirm="pendingCloseProjectId ? confirmCloseProject() : confirmClose()"
       @cancel="closeConfirmModal = false" />
   </div>
 </template>
@@ -71,7 +71,8 @@ export default defineComponent({
       // 弹窗状态
       closeConfirmModal: false,
       closeConfirmMessage: '',
-      closeSessionId: ''
+      closeSessionId: '',
+      pendingCloseProjectId: '' as string | null
     }
   },
 
@@ -144,7 +145,20 @@ export default defineComponent({
     },
 
     handleCloseProjectTab(projectId: string) {
-      appBusiness.closeProjectTab(projectId)
+      const tab = this.localTabs.find(t => t.projectId === projectId)
+      if (tab) {
+        this.pendingCloseProjectId = projectId
+        this.closeConfirmMessage = `确定要关闭项目 "${tab.projectName}" 吗？`
+        this.closeConfirmModal = true
+      }
+    },
+
+    confirmCloseProject() {
+      if (this.pendingCloseProjectId) {
+        appBusiness.closeProjectTab(this.pendingCloseProjectId)
+      }
+      this.closeConfirmModal = false
+      this.pendingCloseProjectId = null
     },
 
     handleToggleSidebar() {

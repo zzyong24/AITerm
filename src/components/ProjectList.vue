@@ -75,7 +75,7 @@
                 <!-- 目录树 -->
                 <div v-if="expandedId === project.id" class="project-tree-container">
                   <DirectoryTree :root-path="project.path" @node-click="handleTreeNodeClick"
-                    @open-editor="handleOpenEditor" />
+                    @open-editor="handleOpenEditor" @search-in-directory="handleSearchInDirectory" />
                 </div>
               </div>
             </div>
@@ -195,6 +195,8 @@
         :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }" @click.stop>
         <template v-if="contextMenu.type === 'project'">
           <div class="context-menu-item" @click="handleLaunchTerminal">创建终端</div>
+          <div class="context-menu-item" v-if="hasTerminalsToRestore" @click="handleRestoreTerminals">恢复终端</div>
+          <div class="context-menu-separator" />
           <div class="context-menu-item" @click="handleSearchInDirectory">在目录中搜索</div>
           <div class="context-menu-separator" />
           <div class="context-menu-item" @click="handleOpenInEditor">编辑器打开</div>
@@ -280,6 +282,7 @@ import {
   searchFileContent as apiSearchFileContent,
   openProjectInEditor as apiOpenProjectInEditor,
   execCommand as apiExecCommand,
+  loadTerminals,
   type GitStatus
 } from '../api'
 import { alert, confirm, prompt } from '../plugins/MessageBox'
@@ -338,6 +341,7 @@ export default defineComponent({
       } as ContextMenuState,
       expandedId: null as string | null,
       hoveredProject: null as { path: string; x: number; y: number } | null,
+      hasTerminalsToRestore: false,
       gitStatusMap: {} as GitStatusMap,
       activeTab: 'explorer' as 'explorer' | 'search' | 'git',
       searchQuery: '',
@@ -605,6 +609,13 @@ export default defineComponent({
       this.closeContextMenu()
     },
 
+    handleRestoreTerminals() {
+      if (this.contextMenu.project) {
+        appBusiness.loadProjectTerminals(this.contextMenu.project.id)
+      }
+      this.closeContextMenu()
+    },
+
     startRename() {
       if (this.contextMenu.project) {
         this.editingId = this.contextMenu.project.id
@@ -628,7 +639,7 @@ export default defineComponent({
       }
     },
 
-    showContextMenu(e: MouseEvent, project: Project | null, type: 'project' | 'file' | 'directory' = 'project', path: string = '') {
+    async showContextMenu(e: MouseEvent, project: Project | null, type: 'project' | 'file' | 'directory' = 'project', path: string = '') {
       this.contextMenu = {
         visible: true,
         x: e.clientX,
@@ -636,6 +647,18 @@ export default defineComponent({
         project,
         type,
         path
+      }
+
+      // 检查是否有可恢复的终端
+      if (type === 'project' && project) {
+        try {
+          const terminals = await loadTerminals(project.path)
+          this.hasTerminalsToRestore = terminals.length > 0
+        } catch {
+          this.hasTerminalsToRestore = false
+        }
+      } else {
+        this.hasTerminalsToRestore = false
       }
 
       setTimeout(() => {
@@ -778,10 +801,12 @@ export default defineComponent({
       }
     },
 
-    handleSearchInDirectory() {
-      if (this.contextMenu.project) {
+    handleSearchInDirectory(path?: string) {
+      // 可以从 DirectoryTree 传入特定路径
+      const searchPath = path || this.contextMenu.path || this.contextMenu.project?.path
+      if (searchPath) {
         this.activeTab = 'search'
-        this.searchPath = this.contextMenu.path || this.contextMenu.project.path
+        this.searchPath = searchPath
         this.searchQuery = ''
       }
       this.closeContextMenu()

@@ -338,4 +338,117 @@ async writeFile(path: string, content: string): Promise<void> {
       throw e
     }
   }
+
+  // ============ 终端历史 ============
+  private getHistoryDir(projectPath: string): string {
+    return join(projectPath, '.aiterm')
+  }
+
+  private getHistoryFilePath(projectPath: string): string {
+    return join(this.getHistoryDir(projectPath), 'terminal-history.json')
+  }
+
+  saveTerminalHistory(projectPath: string, workingDir: string, entries: { type: 'input' | 'output'; content: string; timestamp: number }[]): void {
+    try {
+      const historyDir = this.getHistoryDir(projectPath)
+      if (!existsSync(historyDir)) {
+        mkdirSync(historyDir, { recursive: true })
+      }
+      const historyFile = this.getHistoryFilePath(projectPath)
+      // 读取现有历史
+      let existingHistory: { dir: string; entries: { type: 'input' | 'output'; content: string; timestamp: number }[] }[] = []
+      if (existsSync(historyFile)) {
+        try {
+          existingHistory = JSON.parse(readFileSync(historyFile, 'utf-8'))
+        } catch {}
+      }
+      // 更新当前目录的历史
+      const dirIndex = existingHistory.findIndex(h => h.dir === workingDir)
+      if (dirIndex >= 0) {
+        existingHistory[dirIndex].entries = entries.slice(-1000)
+      } else {
+        existingHistory.push({ dir: workingDir, entries: entries.slice(-1000) })
+      }
+      // 限制只保存20个目录的历史
+      if (existingHistory.length > 20) {
+        existingHistory = existingHistory.slice(-20)
+      }
+      writeFileSync(historyFile, JSON.stringify(existingHistory), 'utf-8')
+    } catch (e) {
+      log.error(`Failed to save terminal history:`, e)
+    }
+  }
+
+  loadTerminalHistory(projectPath: string, workingDir: string): { type: 'input' | 'output'; content: string; timestamp: number }[] {
+    try {
+      const historyFile = this.getHistoryFilePath(projectPath)
+      if (!existsSync(historyFile)) {
+        return []
+      }
+      const content = readFileSync(historyFile, 'utf-8')
+      const history = JSON.parse(content) as { dir: string; entries: { type: 'input' | 'output'; content: string; timestamp: number }[] }[]
+      const dirHistory = history.find(h => h.dir === workingDir)
+      return dirHistory?.entries || []
+    } catch (e) {
+      log.error(`Failed to load terminal history:`, e)
+      return []
+    }
+  }
+
+  clearTerminalHistory(projectPath: string, workingDir: string): void {
+    try {
+      const historyFile = this.getHistoryFilePath(projectPath)
+      if (!existsSync(historyFile)) return
+      const content = readFileSync(historyFile, 'utf-8')
+      let history = JSON.parse(content) as { dir: string; entries: any }[]
+      history = history.filter(h => h.dir !== workingDir)
+      writeFileSync(historyFile, JSON.stringify(history), 'utf-8')
+    } catch (e) {
+      log.error(`Failed to clear terminal history:`, e)
+    }
+  }
+
+  // ============ 终端列表保存/恢复 ============
+  private getTerminalsFilePath(projectPath: string): string {
+    return join(this.getHistoryDir(projectPath), 'terminals.json')
+  }
+
+  saveTerminals(projectPath: string, terminals: { workingDir: string }[]): void {
+    try {
+      const historyDir = this.getHistoryDir(projectPath)
+      if (!existsSync(historyDir)) {
+        mkdirSync(historyDir, { recursive: true })
+      }
+      const terminalsFile = this.getTerminalsFilePath(projectPath)
+      writeFileSync(terminalsFile, JSON.stringify({ projectPath, terminals }), 'utf-8')
+    } catch (e) {
+      log.error(`Failed to save terminals:`, e)
+    }
+  }
+
+  loadTerminals(projectPath: string): { workingDir: string }[] {
+    try {
+      const terminalsFile = this.getTerminalsFilePath(projectPath)
+      if (!existsSync(terminalsFile)) {
+        return []
+      }
+      const content = readFileSync(terminalsFile, 'utf-8')
+      const data = JSON.parse(content)
+      return data.terminals || []
+    } catch (e) {
+      log.error(`Failed to load terminals:`, e)
+      return []
+    }
+  }
+
+  clearTerminals(projectPath: string): void {
+    try {
+      const terminalsFile = this.getTerminalsFilePath(projectPath)
+      if (existsSync(terminalsFile)) {
+        unlinkSync(terminalsFile)
+      }
+    } catch (e) {
+      log.error(`Failed to clear terminals:`, e)
+    }
+  }
 }

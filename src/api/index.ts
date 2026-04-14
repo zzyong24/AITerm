@@ -53,6 +53,16 @@ export const windowSetFullscreen = api.windowSetFullscreen
 export const windowIsFullscreen = api.windowIsFullscreen
 export const windowToggleFullscreen = api.windowToggleFullscreen
 
+// 终端历史
+export const saveTerminalHistory = api.saveTerminalHistory
+export const loadTerminalHistory = api.loadTerminalHistory
+export const clearTerminalHistory = api.clearTerminalHistory
+
+// 终端列表保存/恢复
+export const saveTerminals = api.saveTerminals
+export const loadTerminals = api.loadTerminals
+export const clearTerminals = api.clearTerminals
+
 // 导出环境检测结果
 export const isRunningInElectron = isElectron
 
