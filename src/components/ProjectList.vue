@@ -281,7 +281,10 @@ import {
   searchInDirectory as apiSearchInDirectory,
   searchFileContent as apiSearchFileContent,
   openProjectInEditor as apiOpenProjectInEditor,
-  execCommand as apiExecCommand,
+  gitStageAll as apiGitStageAll,
+  gitCommit as apiGitCommit,
+  gitPush as apiGitPush,
+  gitPull as apiGitPull,
   loadTerminals,
   type GitStatus
 } from '../api'
@@ -522,12 +525,12 @@ export default defineComponent({
     async handleGitStageAll() {
       if (!this.contextMenu.project) return
       try {
-        const result = await apiExecCommand('git add -A', this.contextMenu.project.path)
+        const result = await apiGitStageAll(this.contextMenu.project.path)
         if (result.success) {
           await this.loadGitStatus(this.contextMenu.project)
           alert('已暂存所有更改')
         } else {
-          alert(result.error || '暂存失败')
+          alert(result.message || '暂存失败')
         }
       } catch (e) {
         alert(`暂存失败: ${e}`)
@@ -540,12 +543,12 @@ export default defineComponent({
       const message = await prompt('请输入提交信息:')
       if (!message) return
       try {
-        const result = await apiExecCommand(`git commit -m "${message}"`, this.contextMenu.project.path)
+        const result = await apiGitCommit(this.contextMenu.project.path, message)
         if (result.success) {
           await this.loadGitStatus(this.contextMenu.project)
           alert('提交成功')
         } else {
-          alert(result.error || '提交失败')
+          alert(result.message || '提交失败')
         }
       } catch (e) {
         alert(`提交失败: ${e}`)
@@ -556,12 +559,12 @@ export default defineComponent({
     async handleGitPush() {
       if (!this.contextMenu.project) return
       try {
-        const result = await apiExecCommand('git push', this.contextMenu.project.path)
+        const result = await apiGitPush(this.contextMenu.project.path)
         if (result.success) {
           await this.loadGitStatus(this.contextMenu.project)
           alert('推送成功')
         } else {
-          alert(result.error || '推送失败')
+          alert(result.message || '推送失败')
         }
       } catch (e) {
         alert(`推送失败: ${e}`)
@@ -572,12 +575,12 @@ export default defineComponent({
     async handleGitPull() {
       if (!this.contextMenu.project) return
       try {
-        const result = await apiExecCommand('git pull', this.contextMenu.project.path)
+        const result = await apiGitPull(this.contextMenu.project.path)
         if (result.success) {
           await this.loadGitStatus(this.contextMenu.project)
           alert('拉取成功')
         } else {
-          alert(result.error || '拉取失败')
+          alert(result.message || '拉取失败')
         }
       } catch (e) {
         alert(`拉取失败: ${e}`)
@@ -694,11 +697,12 @@ export default defineComponent({
       this.hoveredProject = null
     },
 
-    async loadGitStatus(project: Project) {
-      try {
+async loadGitStatus(project: Project) {
+    try {
         const status = await apiGetGitStatus(project.path)
         if (status.isRepo) {
-          this.gitStatusMap[project.id] = status
+          // 使用展开运算符触发 Vue 3 响应式更新
+          this.gitStatusMap = { ...this.gitStatusMap, [project.id]: status }
         }
       } catch (e) {
         console.error('Failed to load git status:', e)

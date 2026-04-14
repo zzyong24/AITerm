@@ -201,6 +201,30 @@ export const searchFileContent = (dirPath: string, query: string) =>
 export const getGitStatus = (path: string) =>
   apiCall<GitStatus>('/git-status?path=' + encodeURIComponent(path))
 
+export const gitStageAll = (repoPath: string) =>
+  apiCall<{ success: boolean; message: string }>('/git-stage-all', {
+    method: 'POST',
+    body: JSON.stringify({ repoPath }),
+  })
+
+export const gitCommit = (repoPath: string, message: string) =>
+  apiCall<{ success: boolean; message: string }>('/git-commit', {
+    method: 'POST',
+    body: JSON.stringify({ repoPath, message }),
+  })
+
+export const gitPush = (repoPath: string) =>
+  apiCall<{ success: boolean; message: string }>('/git-push', {
+    method: 'POST',
+    body: JSON.stringify({ repoPath }),
+  })
+
+export const gitPull = (repoPath: string) =>
+  apiCall<{ success: boolean; message: string }>('/git-pull', {
+    method: 'POST',
+    body: JSON.stringify({ repoPath }),
+  })
+
 export const execCommand = (command: string, cwd: string) =>
   apiCall<{ success: boolean; output?: string; error?: string }>('/exec', {
     method: 'POST',
