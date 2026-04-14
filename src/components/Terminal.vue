@@ -48,7 +48,8 @@ import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { terminalOutputListener, terminalClosedListener, writeToTerminal, resizeTerminal, saveTerminalHistory, loadTerminalHistory } from '../api'
-import { appBusiness } from '../store/AppBusiness'
+import { appBusiness, AppEvents } from '../store/AppBusiness'
+import { eventBus } from '../utils/EventBus'
 
 export default defineComponent({
   name: 'Terminal',
@@ -165,6 +166,9 @@ export default defineComponent({
       }
     })
 
+    // 监听设置变化（字体大小等）
+    eventBus.on(AppEvents.SETTINGS_CHANGE, this.handleSettingsChange)
+
     // 使用 ResizeObserver 监听容器大小变化，比 window resize 更准确
     this.resizeObserver = new ResizeObserver(() => {
       if (this.isActive) {
@@ -178,6 +182,7 @@ export default defineComponent({
   },
 
   beforeUnmount() {
+    eventBus.off(AppEvents.SETTINGS_CHANGE, this.handleSettingsChange)
     // TODO: 暂时禁用会话历史
     // this.saveHistory()
 
@@ -219,7 +224,7 @@ export default defineComponent({
 
       this.terminal = new XTerm({
         fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-        fontSize: 14,
+        fontSize: appBusiness.terminalFontSize,
         theme: {
           background: '#1e1e1e',
           foreground: '#d4d4d4',
@@ -270,6 +275,15 @@ export default defineComponent({
 
         // 初始调整大小
         resizeTerminal(this.id, this.terminal.rows, this.terminal.cols)
+      }
+    },
+
+    handleSettingsChange(data: { editorPath?: string; terminalFontSize?: number }) {
+      if (data.terminalFontSize !== undefined && this.terminal) {
+        this.terminal.options.fontSize = data.terminalFontSize
+        this.$nextTick(() => {
+          this.fit()
+        })
       }
     },
 

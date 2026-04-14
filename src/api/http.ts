@@ -110,6 +110,10 @@ export const setEditorPath = (editorPath: string | null) =>
     body: JSON.stringify({ editorPath }),
   })
 
+// 终端字体大小 - HTTP 模式下使用默认值
+export const getTerminalFontSize = () => Promise.resolve(14)
+export const setTerminalFontSize = (_fontSize: number) => Promise.resolve()
+
 export const openProjectInEditor = (projectPath: string) =>
   apiCall<void>('/open-in-editor', {
     method: 'POST',
@@ -133,6 +137,8 @@ export interface DirEntryInfo {
   path: string
   isDirectory: boolean
   isGitIgnored: boolean
+  isUntracked: boolean
+  isModified: boolean
 }
 
 export const readDirectoryBatch = (path: string, showHidden: boolean): Promise<DirEntryInfo[]> =>
@@ -201,11 +207,20 @@ export const searchFileContent = (dirPath: string, query: string) =>
 export const getGitStatus = (path: string) =>
   apiCall<GitStatus>('/git-status?path=' + encodeURIComponent(path))
 
+export const gitStageFile = (_repoPath: string, _filePath: string) =>
+  Promise.resolve({ success: false, message: '暂存单个文件在浏览器模式下暂不支持' } as { success: boolean; message: string })
+
 export const gitStageAll = (repoPath: string) =>
   apiCall<{ success: boolean; message: string }>('/git-stage-all', {
     method: 'POST',
     body: JSON.stringify({ repoPath }),
   })
+
+export const gitUnstageFile = (_repoPath: string, _filePath: string) =>
+  Promise.resolve({ success: false, message: '取消暂存在浏览器模式下暂不支持' } as { success: boolean; message: string })
+
+export const gitDiscardChanges = (_repoPath: string, _filePath: string) =>
+  Promise.resolve({ success: false, message: '丢弃更改在浏览器模式下暂不支持' } as { success: boolean; message: string })
 
 export const gitCommit = (repoPath: string, message: string) =>
   apiCall<{ success: boolean; message: string }>('/git-commit', {

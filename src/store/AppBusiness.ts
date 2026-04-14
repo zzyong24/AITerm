@@ -10,6 +10,8 @@ import {
   getHomeDir as apiGetHomeDir,
   getEditorPath as apiGetEditorPath,
   setEditorPath as apiSetEditorPath,
+  getTerminalFontSize as apiGetTerminalFontSize,
+  setTerminalFontSize as apiSetTerminalFontSize,
   addProject as apiAddProject,
   removeProject as apiRemoveProject,
   saveTerminals as apiSaveTerminals,
@@ -88,6 +90,7 @@ class AppBusinessClass {
   activeEditorId: string | null = null
   homeDir = ''
   editorPath = ''
+  terminalFontSize = 14
   sidebarCollapsed = false
   sidebarWidth = 260
   showSettings = false
@@ -121,7 +124,8 @@ class AppBusinessClass {
       sidebarCollapsed: this.sidebarCollapsed,
       sidebarWidth: this.sidebarWidth,
       showSettings: this.showSettings,
-      editorPath: this.editorPath
+      editorPath: this.editorPath,
+      terminalFontSize: this.terminalFontSize
     })
   }
 
@@ -138,7 +142,8 @@ class AppBusinessClass {
     eventBus.emit(AppEvents.INITIALIZED, {
       projects: [...this.projects],
       homeDir: this.homeDir,
-      editorPath: this.editorPath
+      editorPath: this.editorPath,
+      terminalFontSize: this.terminalFontSize
     })
   }
 
@@ -155,6 +160,12 @@ class AppBusinessClass {
     this.editorPath = path
     this.notifySettingsChange()
     apiSetEditorPath(path)
+  }
+
+  setTerminalFontSize(fontSize: number) {
+    this.terminalFontSize = fontSize
+    this.notifySettingsChange()
+    apiSetTerminalFontSize(fontSize)
   }
 
   // ============ UI状态（驱动Tabs） ============
@@ -247,14 +258,16 @@ class AppBusinessClass {
   // ============ 初始化 ============
   async initialize() {
     try {
-      const [projects, homeDir, editorPath] = await Promise.all([
+      const [projects, homeDir, editorPath, terminalFontSize] = await Promise.all([
         apiGetProjects(),
         apiGetHomeDir(),
-        apiGetEditorPath()
+        apiGetEditorPath(),
+        apiGetTerminalFontSize()
       ])
       this.projects = projects
       this.homeDir = homeDir
       this.editorPath = editorPath || ''
+      this.terminalFontSize = terminalFontSize || 14
       this.notifyInitialized()
       this.notifyProjectsChange()
       this.notifySettingsChange()
@@ -280,6 +293,12 @@ class AppBusinessClass {
       } catch (err) {
         console.error('Failed to get editor path:', err)
         this.editorPath = ''
+      }
+      try {
+        this.terminalFontSize = await apiGetTerminalFontSize() || 14
+      } catch (err) {
+        console.error('Failed to get terminal font size:', err)
+        this.terminalFontSize = 14
       }
       this.notifyInitialized()
     }

@@ -12,7 +12,10 @@ export class FileService {
     try {
       const entries = readdirSync(dirPath)
       return entries.filter((name) => {
-        if (!showHidden && (name.startsWith('.') || name === 'node_modules')) {
+        if (name === '.DS_Store') {
+          return false
+        }
+        if (!showHidden && name.startsWith('.')) {
           return false
         }
         return true
@@ -27,11 +30,42 @@ export class FileService {
     try {
       const entries = readdirSync(dirPath)
       const filtered = entries.filter((name) => {
-        if (!showHidden && (name.startsWith('.') || name === 'node_modules')) {
+        if (name === '.DS_Store') {
+          return false
+        }
+        if (!showHidden && name.startsWith('.')) {
           return false
         }
         return true
       })
+
+      // Get git repo root and status for untracked and modified file detection
+      let untrackedPaths = new Set()
+      let modifiedPaths = new Set()
+      try {
+        const gitDir = execSync(`git -C "${dirPath}" rev-parse --show-toplevel 2>/dev/null`, {
+          encoding: 'utf-8',
+          stdio: ['pipe', 'pipe', 'pipe']
+        }).trim()
+        if (gitDir) {
+          const untrackedOutput = execSync(`git -C "${gitDir}" ls-files --others --exclude-standard`, {
+            encoding: 'utf-8',
+            stdio: ['pipe', 'pipe', 'pipe']
+          })
+          untrackedOutput.trim().split('\n').filter(Boolean).forEach(f => {
+            const absPath = join(gitDir, f)
+            untrackedPaths.add(absPath)
+          })
+          const modifiedOutput = execSync(`git -C "${gitDir}" diff --name-only`, {
+            encoding: 'utf-8',
+            stdio: ['pipe', 'pipe', 'pipe']
+          })
+          modifiedOutput.trim().split('\n').filter(Boolean).forEach(f => {
+            const absPath = join(gitDir, f)
+            modifiedPaths.add(absPath)
+          })
+        }
+      } catch {}
 
       const results = []
       for (const name of filtered) {
@@ -52,6 +86,8 @@ export class FileService {
           path: fullPath,
           isDirectory: isDir,
           isGitIgnored,
+          isUntracked: untrackedPaths.has(fullPath),
+          isModified: modifiedPaths.has(fullPath),
           size
         })
       }

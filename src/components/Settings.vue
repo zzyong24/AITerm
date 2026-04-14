@@ -18,6 +18,17 @@
           </div>
           <p class="setting-hint">留空则自动检测，或手动指定 VS Code、Cursor 等编辑器</p>
         </div>
+        <div class="setting-item">
+          <label>终端字体大小</label>
+          <input
+            v-model.number="terminalFontSize"
+            type="number"
+            min="8"
+            max="32"
+            class="font-size-input"
+          />
+          <p class="setting-hint">范围: 8 ~ 32，默认 14</p>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn-cancel" @click="$emit('close')">取消</button>
@@ -40,13 +51,15 @@ export default defineComponent({
 
   data() {
     return {
-      editorPath: ''
+      editorPath: '',
+      terminalFontSize: 14
     }
   },
 
   mounted() {
     eventBus.on(AppEvents.SETTINGS_CHANGE, this.handleSettingsChange)
     this.editorPath = appBusiness.editorPath
+    this.terminalFontSize = appBusiness.terminalFontSize
   },
 
   beforeUnmount() {
@@ -54,8 +67,9 @@ export default defineComponent({
   },
 
   methods: {
-    handleSettingsChange(data: { sidebarCollapsed: boolean; showSettings: boolean; editorPath: string }) {
+    handleSettingsChange(data: { sidebarCollapsed: boolean; showSettings: boolean; editorPath: string; terminalFontSize: number }) {
       this.editorPath = data.editorPath
+      this.terminalFontSize = data.terminalFontSize
     },
 
     async handleBrowse() {
@@ -71,6 +85,8 @@ export default defineComponent({
 
     async handleSave() {
       appBusiness.setEditorPath(this.editorPath)
+      const fontSize = Math.max(8, Math.min(32, Number(this.terminalFontSize) || 14))
+      appBusiness.setTerminalFontSize(fontSize)
       this.$emit('close')
     }
   }
@@ -207,5 +223,20 @@ export default defineComponent({
   margin-top: 6px;
   font-size: 12px;
   color: #858585;
+}
+
+.font-size-input {
+  width: 80px;
+  padding: 8px;
+  background: #3c3c3c;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  color: #d4d4d4;
+  font-size: 14px;
+}
+
+.font-size-input:focus {
+  outline: none;
+  border-color: #007acc;
 }
 </style>

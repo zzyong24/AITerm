@@ -87,6 +87,12 @@ export const getEditorPath = () =>
 export const setEditorPath = (editorPath: string | null) =>
   window.electronAPI.invoke('set-editor-path', editorPath)
 
+export const getTerminalFontSize = () =>
+  window.electronAPI.invoke<number>('get-terminal-font-size')
+
+export const setTerminalFontSize = (fontSize: number) =>
+  window.electronAPI.invoke('set-terminal-font-size', fontSize)
+
 export const openProjectInEditor = (projectPath: string) =>
   window.electronAPI.invoke('open-project-in-editor', projectPath)
 
@@ -105,6 +111,8 @@ export interface DirEntryInfo {
   path: string
   isDirectory: boolean
   isGitIgnored: boolean
+  isUntracked: boolean
+  isModified: boolean
 }
 
 export const readDirectoryBatch = (path: string, showHidden: boolean): Promise<DirEntryInfo[]> =>

@@ -22,7 +22,6 @@
             <path d="M13 6h3a2 2 0 0 1 2 2v7" />
             <path d="M6 9v12" />
           </svg>
-          <span v-if="totalGitChanges > 0" class="git-badge">{{ Math.min(totalGitChanges, 99) }}</span>
         </button>
         <div class="panel-tabs-spacer"></div>
         <button class="btn-settings" @click="handleToggleSettings" title="设置">
@@ -56,8 +55,10 @@
                 <template v-else>
                   <div class="project-name" @click.stop="toggleExpand(project.id)"
                     @contextmenu.prevent="(e) => showContextMenu(e, project, 'project')">
-                    <span class="expand-toggle">{{ expandedId === project.id ? '▼' : '▶' }}</span>
-                    {{ project.name }}
+                    <span class="project-name-left">
+                      <span class="expand-toggle">{{ expandedId === project.id ? '▼' : '▶' }}</span>
+                      {{ project.name }}
+                    </span>
                     <span v-if="getGitStatus(project.path)" class="git-icon-wrapper">
                       <svg class="git-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                         stroke-width="2">
@@ -171,17 +172,63 @@
             <div class="git-project-info">
               <span class="git-branch">{{ project.gitStatus?.branch || 'master' }}</span>
               <span class="git-project-name">{{ project.name }}</span>
+              <span class="git-refresh" @click.stop="loadGitStatus(project)" title="刷新">↻</span>
             </div>
             <div v-if="project.gitStatus" class="git-changes">
-              <span v-if="project.gitStatus.modified?.length" class="git-change modified">
-                {{ project.gitStatus.modified.length }} 个文件已修改
-              </span>
-              <span v-if="project.gitStatus.untracked?.length" class="git-change untracked">
-                {{ project.gitStatus.untracked.length }} 个未跟踪文件
-              </span>
-              <span v-if="project.gitStatus.staged?.length" class="git-change staged">
-                {{ project.gitStatus.staged.length }} 个文件已暂存
-              </span>
+              <div v-if="project.gitStatus.modified?.length" class="git-section">
+                <div class="git-section-header" @click.stop="toggleGitSection(project.id, 'modified')">
+                  <span class="git-section-title">
+                    <span class="git-section-arrow">{{ expandedGitSections[project.id + '_modified'] ? '▼' : '▶' }}</span>
+                    <span class="git-change modified">{{ project.gitStatus.modified.length }} 个文件已修改</span>
+                  </span>
+                </div>
+                <div v-if="expandedGitSections[project.id + '_modified']" class="git-file-list">
+                  <div v-for="file in project.gitStatus.modified.slice(0, 100)" :key="file" class="git-file-item" :title="file"
+                    @click.stop="openGitFile(project, file)"
+                    @contextmenu.prevent.stop="(e) => showGitFileContextMenu(e, project, file, 'modified')">
+                    {{ file }}
+                  </div>
+                  <div v-if="project.gitStatus.modified.length > 100" class="git-file-more">
+                    还有 {{ project.gitStatus.modified.length - 100 }} 个文件未显示
+                  </div>
+                </div>
+              </div>
+              <div v-if="project.gitStatus.untracked?.length" class="git-section">
+                <div class="git-section-header" @click.stop="toggleGitSection(project.id, 'untracked')">
+                  <span class="git-section-title">
+                    <span class="git-section-arrow">{{ expandedGitSections[project.id + '_untracked'] ? '▼' : '▶' }}</span>
+                    <span class="git-change untracked">{{ project.gitStatus.untracked.length }} 个未跟踪文件</span>
+                  </span>
+                </div>
+                <div v-if="expandedGitSections[project.id + '_untracked']" class="git-file-list">
+                  <div v-for="file in project.gitStatus.untracked.slice(0, 100)" :key="file" class="git-file-item" :title="file"
+                    @click.stop="openGitFile(project, file)"
+                    @contextmenu.prevent.stop="(e) => showGitFileContextMenu(e, project, file, 'untracked')">
+                    {{ file }}
+                  </div>
+                  <div v-if="project.gitStatus.untracked.length > 100" class="git-file-more">
+                    还有 {{ project.gitStatus.untracked.length - 100 }} 个文件未显示
+                  </div>
+                </div>
+              </div>
+              <div v-if="project.gitStatus.staged?.length" class="git-section">
+                <div class="git-section-header" @click.stop="toggleGitSection(project.id, 'staged')">
+                  <span class="git-section-title">
+                    <span class="git-section-arrow">{{ expandedGitSections[project.id + '_staged'] ? '▼' : '▶' }}</span>
+                    <span class="git-change staged">{{ project.gitStatus.staged.length }} 个文件已暂存</span>
+                  </span>
+                </div>
+                <div v-if="expandedGitSections[project.id + '_staged']" class="git-file-list">
+                  <div v-for="file in project.gitStatus.staged.slice(0, 100)" :key="file" class="git-file-item" :title="file"
+                    @click.stop="openGitFile(project, file)"
+                    @contextmenu.prevent.stop="(e) => showGitFileContextMenu(e, project, file, 'staged')">
+                    {{ file }}
+                  </div>
+                  <div v-if="project.gitStatus.staged.length > 100" class="git-file-more">
+                    还有 {{ project.gitStatus.staged.length - 100 }} 个文件未显示
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -231,6 +278,26 @@
           <div class="context-menu-item" @click="handleGitPull">从远程拉取</div>
           <div class="context-menu-separator" />
           <div class="context-menu-item" @click="handleRefreshGitStatus">刷新状态</div>
+        </template>
+        <template v-else-if="contextMenu.type === 'gitfile'">
+          <div class="context-menu-item" @click="handleEditFile">编辑</div>
+          <div class="context-menu-item" @click="handleOpenFile">打开</div>
+          <div class="context-menu-separator" />
+          <template v-if="contextMenu.gitFileType === 'untracked'">
+            <div class="context-menu-item" @click="handleGitStageFile">加入跟踪</div>
+            <div class="context-menu-separator" />
+          </template>
+          <template v-if="contextMenu.gitFileType === 'staged'">
+            <div class="context-menu-item" @click="handleGitUnstageFile">取消暂存</div>
+            <div class="context-menu-separator" />
+          </template>
+          <template v-if="contextMenu.gitFileType === 'modified'">
+            <div class="context-menu-item" @click="handleGitDiscardChanges">丢弃更改</div>
+            <div class="context-menu-separator" />
+          </template>
+          <div class="context-menu-item" @click="handleCopyPath">复制路径</div>
+          <div class="context-menu-separator" />
+          <div class="context-menu-item danger" @click="handleDeleteFile">删除</div>
         </template>
       </div>
 
@@ -282,9 +349,13 @@ import {
   searchFileContent as apiSearchFileContent,
   openProjectInEditor as apiOpenProjectInEditor,
   gitStageAll as apiGitStageAll,
+  gitStageFile as apiGitStageFile,
+  gitUnstageFile as apiGitUnstageFile,
   gitCommit as apiGitCommit,
   gitPush as apiGitPush,
   gitPull as apiGitPull,
+  gitDiscardChanges as apiGitDiscardChanges,
+  deletePath as apiDeletePath,
   loadTerminals,
   type GitStatus
 } from '../api'
@@ -297,8 +368,9 @@ interface ContextMenuState {
   x: number
   y: number
   project: Project | null
-  type: 'project' | 'file' | 'directory' | 'git'
+  type: 'project' | 'file' | 'directory' | 'git' | 'gitfile'
   path: string
+  gitFileType?: 'modified' | 'untracked' | 'staged'
 }
 
 interface GitStatusMap {
@@ -354,6 +426,7 @@ export default defineComponent({
       showPathPicker: false,
       searching: false,
       expandedFiles: [] as string[],
+      expandedGitSections: {} as Record<string, boolean>,
       searchOptions: {
         caseSensitive: false,
         wholeWord: false,
@@ -471,6 +544,43 @@ export default defineComponent({
       appBusiness.toggleSettings()
     },
 
+    toggleGitSection(projectId: string, type: string) {
+      const key = projectId + '_' + type
+      this.expandedGitSections[key] = !this.expandedGitSections[key]
+    },
+
+    openGitFile(project: Project & { gitStatus: GitStatus | null }, file: string) {
+      const filePath = project.path.endsWith('/') ? `${project.path}${file}` : `${project.path}/${file}`
+      const projectId = project.id || null
+      const projectName = project.name || null
+
+      this.$emit('switch-project', projectId)
+
+      apiReadFile(filePath).then(content => {
+        this.$emit('open-editor', {
+          projectId,
+          projectName,
+          path: filePath,
+          content
+        })
+      }).catch(e => {
+        alert(`读取文件失败: ${e}`)
+      })
+    },
+
+    showGitFileContextMenu(e: MouseEvent, project: Project & { gitStatus: GitStatus | null }, file: string, gitFileType: 'modified' | 'untracked' | 'staged') {
+      const filePath = project.path.endsWith('/') ? `${project.path}${file}` : `${project.path}/${file}`
+      this.contextMenu = {
+        visible: true,
+        x: e.clientX,
+        y: e.clientY,
+        project,
+        type: 'gitfile',
+        path: filePath,
+        gitFileType
+      }
+    },
+
     isProjectActive(projectId: string): boolean {
       return this.activeProjectId === projectId
     },
@@ -534,6 +644,53 @@ export default defineComponent({
         }
       } catch (e) {
         alert(`暂存失败: ${e}`)
+      }
+      this.closeContextMenu()
+    },
+
+    async handleGitStageFile() {
+      if (!this.contextMenu.project) return
+      try {
+        const result = await apiGitStageFile(this.contextMenu.project.path, this.contextMenu.path)
+        if (result.success) {
+          await this.loadGitStatus(this.contextMenu.project)
+        } else {
+          alert(result.message || '暂存失败')
+        }
+      } catch (e) {
+        alert(`暂存失败: ${e}`)
+      }
+      this.closeContextMenu()
+    },
+
+    async handleGitUnstageFile() {
+      if (!this.contextMenu.project) return
+      try {
+        const result = await apiGitUnstageFile(this.contextMenu.project.path, this.contextMenu.path)
+        if (result.success) {
+          await this.loadGitStatus(this.contextMenu.project)
+        } else {
+          alert(result.message || '取消暂存失败')
+        }
+      } catch (e) {
+        alert(`取消暂存失败: ${e}`)
+      }
+      this.closeContextMenu()
+    },
+
+    async handleGitDiscardChanges() {
+      if (!this.contextMenu.project) return
+      const confirmed = await confirm(`确定要丢弃文件 "${this.contextMenu.path}" 的更改吗？此操作不可撤销。`)
+      if (!confirmed) return
+      try {
+        const result = await apiGitDiscardChanges(this.contextMenu.project.path, this.contextMenu.path)
+        if (result.success) {
+          await this.loadGitStatus(this.contextMenu.project)
+        } else {
+          alert(result.message || '丢弃更改失败')
+        }
+      } catch (e) {
+        alert(`丢弃更改失败: ${e}`)
       }
       this.closeContextMenu()
     },
@@ -642,7 +799,7 @@ export default defineComponent({
       }
     },
 
-    async showContextMenu(e: MouseEvent, project: Project | null, type: 'project' | 'file' | 'directory' = 'project', path: string = '') {
+    async showContextMenu(e: MouseEvent, project: Project | null, type: 'project' | 'file' | 'directory' | 'git' | 'gitfile' = 'project', path: string = '') {
       this.contextMenu = {
         visible: true,
         x: e.clientX,
@@ -700,10 +857,8 @@ export default defineComponent({
 async loadGitStatus(project: Project) {
     try {
         const status = await apiGetGitStatus(project.path)
-        if (status.isRepo) {
-          // 使用展开运算符触发 Vue 3 响应式更新
-          this.gitStatusMap = { ...this.gitStatusMap, [project.id]: status }
-        }
+        // 使用展开运算符触发 Vue 3 响应式更新
+        this.gitStatusMap = { ...this.gitStatusMap, [project.id]: status }
       } catch (e) {
         console.error('Failed to load git status:', e)
       }
@@ -817,7 +972,15 @@ async loadGitStatus(project: Project) {
     },
 
     handleOpenFile() {
-      console.log('Open file:', this.contextMenu.path)
+      const filePath = this.contextMenu.path
+      if (!filePath) {
+        alert('文件路径无效')
+        this.closeContextMenu()
+        return
+      }
+      apiOpenProjectInEditor(filePath).catch(e => {
+        alert(`打开失败: ${e}`)
+      })
       this.closeContextMenu()
     },
 
@@ -880,7 +1043,15 @@ async loadGitStatus(project: Project) {
     async handleDeleteFile() {
       const confirmed = await confirm(`确定要删除文件 "${this.contextMenu.path}" 吗？此操作不可撤销。`)
       if (confirmed) {
-        console.log('Delete file:', this.contextMenu.path)
+        try {
+          await apiDeletePath(this.contextMenu.path)
+          // 刷新 git 状态
+          if (this.contextMenu.project) {
+            await this.loadGitStatus(this.contextMenu.project)
+          }
+        } catch (e) {
+          alert(`删除失败: ${e}`)
+        }
       }
       this.closeContextMenu()
     },
@@ -1278,6 +1449,7 @@ async loadGitStatus(project: Project) {
 .git-project-info {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
 }
 
@@ -1301,6 +1473,42 @@ async loadGitStatus(project: Project) {
   gap: 2px;
 }
 
+.git-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.git-section-header:hover {
+  opacity: 0.8;
+}
+
+.git-section-title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.git-section-arrow {
+  font-size: 10px;
+  color: #858585;
+  width: 12px;
+  text-align: center;
+}
+
+.git-refresh {
+  font-size: 12px;
+  color: #858585;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.git-refresh:hover {
+  color: #d4d4d4;
+}
+
 .git-change {
   font-size: 11px;
   color: #858585;
@@ -1316,6 +1524,31 @@ async loadGitStatus(project: Project) {
 
 .git-change.staged {
   color: #4ec9b0;
+}
+
+.git-file-list {
+  padding-left: 16px;
+  margin-top: 6px;
+}
+
+.git-file-item {
+  font-size: 11px;
+  color: #d4d4d4;
+  padding: 3px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-file-item:hover {
+  color: #fff;
+}
+
+.git-file-more {
+  font-size: 11px;
+  color: #858585;
+  padding: 2px 0;
+  font-style: italic;
 }
 
 .btn-collapse,
@@ -1399,8 +1632,15 @@ async loadGitStatus(project: Project) {
 .project-name {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: space-between;
   width: 100%;
+}
+
+.project-name-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
 }
 
 .expand-toggle {
@@ -1418,6 +1658,7 @@ async loadGitStatus(project: Project) {
   position: relative;
   display: inline-flex;
   align-items: center;
+  margin-right: 4px;
 }
 
 .git-badge-small {
@@ -1427,7 +1668,7 @@ async loadGitStatus(project: Project) {
   min-width: 12px;
   height: 12px;
   padding: 0 2px;
-  background: #007acc;
+  background: #5a8c5a;
   color: #fff;
   border-radius: 6px;
   font-size: 8px;

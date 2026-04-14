@@ -318,7 +318,6 @@ export default defineComponent({
 
 .tree-node-title.git-ignored {
   opacity: 0.5;
-  text-decoration: line-through;
 }
 
 /* 自定义 tree 样式 */

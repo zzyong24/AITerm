@@ -176,6 +176,14 @@ function registerIpcHandlers() {
     await projectService.setEditorPath(editorPath)
   })
 
+  ipcMain.handle('get-terminal-font-size', async () => {
+    return projectService.getTerminalFontSize()
+  })
+
+  ipcMain.handle('set-terminal-font-size', async (_, fontSize: number) => {
+    await projectService.setTerminalFontSize(fontSize)
+  })
+
   ipcMain.handle('open-project-in-editor', async (_, projectPath: string) => {
     await projectService.openInEditor(projectPath)
   })

@@ -14,6 +14,7 @@ export interface Project {
 
 interface AppSettings {
   editorPath: string | null
+  terminalFontSize: number
 }
 
 interface ProjectStore {
@@ -42,7 +43,7 @@ export class ProjectService {
     } catch (e) {
       log.error('Failed to load project store:', e)
     }
-    return { projects: [], settings: { editorPath: null } }
+    return { projects: [], settings: { editorPath: null, terminalFontSize: 14 } }
   }
 
   private saveStore(store: ProjectStore): void {
@@ -99,6 +100,17 @@ export class ProjectService {
     store.settings.editorPath = editorPath
     this.saveStore(store)
     log.info(`Set editor path: ${editorPath}`)
+  }
+
+  getTerminalFontSize(): number {
+    return this.loadStore().settings.terminalFontSize
+  }
+
+  async setTerminalFontSize(fontSize: number): Promise<void> {
+    const store = this.loadStore()
+    store.settings.terminalFontSize = fontSize
+    this.saveStore(store)
+    log.info(`Set terminal font size: ${fontSize}`)
   }
 
   async openInEditor(projectPath: string): Promise<void> {
