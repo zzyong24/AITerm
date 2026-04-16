@@ -1,41 +1,31 @@
 <template>
   <div class="directory-tree">
     <a-spin v-if="loading && !treeData.length" size="small" class="tree-loading" />
-    <a-tree
-      v-if="treeData.length"
-      :tree-data="treeData"
-      :selected-keys="selectedKeys"
-      :expanded-keys="expandedKeys"
-      :auto-expand-parent="autoExpandParent"
-      :show-line="{ showLeafIcon: false }"
-      :load-data="onLoadData"
-      :selected="selectedKeys.length > 0"
-      @select="onSelect"
-      @expand="onExpand"
-    >
+    <a-tree v-if="treeData.length" :tree-data="treeData" :selected-keys="selectedKeys" :expanded-keys="expandedKeys"
+      :auto-expand-parent="autoExpandParent" :show-line="{ showLeafIcon: false }" :load-data="onLoadData"
+      :selected="selectedKeys.length > 0" @select="onSelect" @expand="onExpand">
       <template #title="{ dataRef }">
-        <span class="tree-node-title" :class="{ 'git-ignored': dataRef.isGitIgnored }" :data-path="dataRef.path" @contextmenu="(e) => onNodeContextMenu(e, dataRef.path, dataRef.isDirectory)">
+        <span class="tree-node-title" :class="{ 'git-ignored': dataRef.isGitIgnored }" :data-path="dataRef.path"
+          @contextmenu="(e) => onNodeContextMenu(e, dataRef.path, dataRef.isDirectory)">
           {{ dataRef.title }}
           <span v-if="dataRef.hasGitDir" class="tree-git-icon-wrapper">
-            <svg class="tree-git-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg class="tree-git-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2">
               <circle cx="18" cy="18" r="3" />
               <circle cx="6" cy="6" r="3" />
               <path d="M13 6h3a2 2 0 0 1 2 2v7" />
               <path d="M6 9v12" />
             </svg>
-            <span v-if="dataRef.gitRepo?.changesCount > 0" class="tree-git-badge">{{ dataRef.gitRepo.changesCount > 99 ? '99+' : dataRef.gitRepo.changesCount }}</span>
+            <span v-if="dataRef.gitRepo?.changesCount > 0" class="tree-git-badge">{{ dataRef.gitRepo.changesCount > 99 ?
+              '99+' : dataRef.gitRepo.changesCount }}</span>
           </span>
         </span>
       </template>
     </a-tree>
 
     <!-- 右键菜单 -->
-    <div
-      v-if="contextMenu.visible"
-      class="context-menu"
-      :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
-      @click.stop
-    >
+    <div v-if="contextMenu.visible" class="context-menu"
+      :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }" @click.stop>
       <div class="context-menu-item" @click="handleOpenTerminal">打开到终端</div>
       <div class="context-menu-item" v-if="contextMenu.isDirectory" @click="handleSearchInDirectory">在目录中搜索</div>
       <div class="context-menu-separator" />
@@ -67,22 +57,11 @@
     </div>
 
     <!-- 版本管理弹窗 -->
-    <GitCommitDialog
-      v-if="commitDialog.visible"
-      :file-list="commitDialog.files"
-      :loading="commitDialog.loading"
-      :branch="commitDialog.branch"
-      :remote="commitDialog.remote"
-      :ahead="commitDialog.ahead"
-      :behind="commitDialog.behind"
-      :last-commit="commitDialog.lastCommit"
-      :committing="commitDialog.committing"
-      :too-many-files-count="commitDialog.tooManyFilesCount"
-      @commit="handleCommitFiles"
-      @cancel="commitDialog.visible = false"
-      @pull="handleDialogPull"
-      @push="handleDialogPush"
-    />
+    <GitCommitDialog v-if="commitDialog.visible" :file-list="commitDialog.files" :loading="commitDialog.loading"
+      :branch="commitDialog.branch" :remote="commitDialog.remote" :ahead="commitDialog.ahead"
+      :behind="commitDialog.behind" :last-commit="commitDialog.lastCommit" :committing="commitDialog.committing"
+      :too-many-files-count="commitDialog.tooManyFilesCount" @commit="handleCommitFiles"
+      @cancel="commitDialog.visible = false" @pull="handleDialogPull" @push="handleDialogPush" />
   </div>
 </template>
 
@@ -238,7 +217,7 @@ export default defineComponent({
       }
     },
 
-async refreshChildrenGitStatus(children: TreeNode[]) {
+    async refreshChildrenGitStatus(children: TreeNode[]) {
       const gitChildren = children.filter((c) => c.hasGitDir)
       if (gitChildren.length === 0) return
 
@@ -725,34 +704,34 @@ async refreshChildrenGitStatus(children: TreeNode[]) {
 
 .context-menu {
   position: fixed;
-  background: #252526;
-  border: 1px solid #3e3e42;
+  background: #ffffff;
+  border: 1px solid #d4d4d4;
   border-radius: 4px;
   padding: 4px 0;
   min-width: 160px;
   z-index: 99999;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .context-menu-item {
   padding: 6px 12px;
   cursor: pointer;
-  color: #d4d4d4;
+  color: #333333;
   font-size: 13px;
 }
 
 .context-menu-item:hover {
-  background: #094771;
+  background: #e8f0fe;
 }
 
 .context-menu-item.danger:hover {
-  background: #5a1d1d;
-  color: #f48771;
+  background: #fce8e6;
+  color: #c42b1c;
 }
 
 .context-menu-separator {
   height: 1px;
-  background: #3e3e42;
+  background: #e0e0e0;
   margin: 4px 0;
 }
 
@@ -770,8 +749,8 @@ async refreshChildrenGitStatus(children: TreeNode[]) {
 }
 
 .modal {
-  background: #252526;
-  border: 1px solid #3e3e42;
+  background: #ffffff;
+  border: 1px solid #d4d4d4;
   border-radius: 8px;
   width: 400px;
   max-width: 90vw;
@@ -783,11 +762,12 @@ async refreshChildrenGitStatus(children: TreeNode[]) {
 
 .modal-header {
   padding: 12px 16px;
-  border-bottom: 1px solid #3e3e42;
+  border-bottom: 1px solid #e0e0e0;
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-weight: 600;
+  color: #333333;
 }
 
 .modal-close {
@@ -799,17 +779,17 @@ async refreshChildrenGitStatus(children: TreeNode[]) {
 }
 
 .modal-close:hover {
-  color: #d4d4d4;
+  color: #333333;
 }
 
 .modal-body {
   padding: 16px;
-  color: #d4d4d4;
+  color: #333333;
 }
 
 .modal-footer {
   padding: 12px 16px;
-  border-top: 1px solid #3e3e42;
+  border-top: 1px solid #e0e0e0;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
@@ -817,20 +797,20 @@ async refreshChildrenGitStatus(children: TreeNode[]) {
 
 .btn-cancel {
   padding: 6px 12px;
-  background: #3e3e42;
-  border: none;
+  background: #f0f0f0;
+  border: 1px solid #d4d4d4;
   border-radius: 4px;
-  color: #d4d4d4;
+  color: #333333;
   cursor: pointer;
 }
 
 .btn-cancel:hover {
-  background: #4e4e4e;
+  background: #e0e0e0;
 }
 
 .btn-confirm {
   padding: 6px 12px;
-  background: #0e639c;
+  background: #007acc;
   border: none;
   border-radius: 4px;
   color: #fff;

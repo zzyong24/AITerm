@@ -3,14 +3,14 @@
     <div class="titlebar-tools">
       <button class="tool-btn" @click="handleRefreshProjects" title="刷新项目列表">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M23 4v6h-6M1 20v-6h6"/>
-          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+          <path d="M23 4v6h-6M1 20v-6h6" />
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
         </svg>
       </button>
       <button class="tool-btn" @click="showKillPortModal = true" title="终止端口进程">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"/>
-          <path d="M15 9l-6 6M9 9l6 6"/>
+          <circle cx="12" cy="12" r="10" />
+          <path d="M15 9l-6 6M9 9l6 6" />
         </svg>
         <span>Kill Port</span>
       </button>
@@ -19,21 +19,21 @@
     <div class="window-controls">
       <button class="window-btn minimize" @click="handleMinimize" title="最小化">
         <svg width="10" height="1" viewBox="0 0 10 1">
-          <rect width="10" height="1" fill="currentColor"/>
+          <rect width="10" height="1" fill="currentColor" />
         </svg>
       </button>
       <button class="window-btn maximize" @click="handleMaximize" :title="isMaximized ? '还原' : '最大化'">
         <svg v-if="!isMaximized" width="10" height="10" viewBox="0 0 10 10">
-          <rect x="0" y="0" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1"/>
+          <rect x="0" y="0" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1" />
         </svg>
         <svg v-else width="10" height="10" viewBox="0 0 10 10">
-          <rect x="2" y="0" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1"/>
-          <rect x="0" y="2" width="8" height="8" fill="#252526" stroke="currentColor" stroke-width="1"/>
+          <rect x="2" y="0" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1" />
+          <rect x="0" y="2" width="8" height="8" fill="#252526" stroke="currentColor" stroke-width="1" />
         </svg>
       </button>
       <button class="window-btn close" @click="handleClose" title="关闭">
         <svg width="10" height="10" viewBox="0 0 10 10">
-          <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.2" />
         </svg>
       </button>
     </div>
@@ -48,7 +48,8 @@
         <div class="modal-body">
           <label>
             端口号
-            <input v-model="killPortInput" type="number" placeholder="例如: 3001" @keydown.enter="handleKillPort" autofocus />
+            <input v-model="killPortInput" type="number" placeholder="例如: 3001" @keydown.enter="handleKillPort"
+              autofocus />
           </label>
         </div>
         <div class="modal-footer">
@@ -222,8 +223,8 @@ export default defineComponent({
 }
 
 .modal {
-  background: #252526;
-  border: 1px solid #3e3e42;
+  background: #ffffff;
+  border: 1px solid #d4d4d4;
   border-radius: 8px;
   width: 320px;
   overflow: hidden;
@@ -234,11 +235,11 @@ export default defineComponent({
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background: #2d2d2d;
-  border-bottom: 1px solid #3e3e42;
+  background: #f5f5f5;
+  border-bottom: 1px solid #e0e0e0;
   font-size: 14px;
   font-weight: 500;
-  color: #d4d4d4;
+  color: #333333;
 }
 
 .modal-close {
@@ -252,7 +253,7 @@ export default defineComponent({
 }
 
 .modal-close:hover {
-  color: #d4d4d4;
+  color: #333333;
 }
 
 .modal-body {
@@ -262,17 +263,17 @@ export default defineComponent({
 .modal-body label {
   display: block;
   font-size: 12px;
-  color: #858585;
+  color: #666666;
   margin-bottom: 8px;
 }
 
 .modal-body input {
   width: 100%;
   padding: 8px 12px;
-  background: #1e1e1e;
-  border: 1px solid #3e3e42;
+  background: #ffffff;
+  border: 1px solid #d4d4d4;
   border-radius: 4px;
-  color: #d4d4d4;
+  color: #333333;
   font-size: 14px;
   outline: none;
 }
@@ -286,10 +287,11 @@ export default defineComponent({
   justify-content: flex-end;
   gap: 8px;
   padding: 12px 16px;
-  border-top: 1px solid #3e3e42;
+  border-top: 1px solid #e0e0e0;
 }
 
-.btn-cancel, .btn-confirm {
+.btn-cancel,
+.btn-confirm {
   padding: 6px 16px;
   border-radius: 4px;
   font-size: 13px;
@@ -299,12 +301,12 @@ export default defineComponent({
 
 .btn-cancel {
   background: transparent;
-  border: 1px solid #3e3e42;
-  color: #d4d4d4;
+  border: 1px solid #d4d4d4;
+  color: #333333;
 }
 
 .btn-cancel:hover {
-  background: #3e3e42;
+  background: #f0f0f0;
 }
 
 .btn-confirm {

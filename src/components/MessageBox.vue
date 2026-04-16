@@ -8,18 +8,14 @@
         </div>
         <div class="message-box-body">
           <p>{{ message }}</p>
-          <input
-            v-if="type === 'prompt'"
-            ref="inputRef"
-            v-model="inputValue"
-            class="message-box-input"
-            :placeholder="placeholder"
-            @keyup.enter="handleConfirm"
-          />
+          <input v-if="type === 'prompt'" ref="inputRef" v-model="inputValue" class="message-box-input"
+            :placeholder="placeholder" @keyup.enter="handleConfirm" />
         </div>
         <div class="message-box-footer">
-          <button v-if="type === 'confirm' || type === 'prompt'" class="btn-cancel" @click="handleCancel">{{ cancelText }}</button>
-          <button class="btn-confirm" :class="{ danger: type === 'confirm' }" @click="handleConfirm">{{ confirmText }}</button>
+          <button v-if="type === 'confirm' || type === 'prompt'" class="btn-cancel" @click="handleCancel">{{ cancelText
+          }}</button>
+          <button class="btn-confirm" :class="{ danger: type === 'confirm' }" @click="handleConfirm">{{ confirmText
+          }}</button>
         </div>
       </div>
     </div>
@@ -129,21 +125,21 @@ export default defineComponent({
 }
 
 .message-box {
-  background: #252526;
-  border: 1px solid #3e3e42;
+  background: #ffffff;
+  border: 1px solid #d4d4d4;
   border-radius: 8px;
   min-width: 320px;
   max-width: 480px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
 }
 
 .message-box.confirm {
-  border-color: #f48771;
+  border-color: #c42b1c;
 }
 
 .message-box-header {
   padding: 12px 16px;
-  border-bottom: 1px solid #3e3e42;
+  border-bottom: 1px solid #e0e0e0;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -151,7 +147,7 @@ export default defineComponent({
 
 .message-box-title {
   font-weight: 600;
-  color: #d4d4d4;
+  color: #333333;
   font-size: 14px;
 }
 
@@ -170,8 +166,8 @@ export default defineComponent({
 }
 
 .message-box-close:hover {
-  background: #3e3e42;
-  color: #d4d4d4;
+  background: #f0f0f0;
+  color: #333333;
 }
 
 .message-box-body {
@@ -179,7 +175,7 @@ export default defineComponent({
 }
 
 .message-box-body p {
-  color: #d4d4d4;
+  color: #333333;
   font-size: 14px;
   line-height: 1.5;
   margin: 0 0 12px 0;
@@ -189,10 +185,10 @@ export default defineComponent({
 .message-box-input {
   width: 100%;
   padding: 8px 12px;
-  background: #3c3c3c;
-  border: 1px solid #3e3e42;
+  background: #ffffff;
+  border: 1px solid #d4d4d4;
   border-radius: 4px;
-  color: #d4d4d4;
+  color: #333333;
   font-size: 14px;
   outline: none;
   box-sizing: border-box;
@@ -203,12 +199,12 @@ export default defineComponent({
 }
 
 .message-box-input::placeholder {
-  color: #858585;
+  color: #999999;
 }
 
 .message-box-footer {
   padding: 12px 16px;
-  border-top: 1px solid #3e3e42;
+  border-top: 1px solid #e0e0e0;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
@@ -224,21 +220,22 @@ export default defineComponent({
 }
 
 .btn-cancel {
-  background: #3e3e42;
-  color: #d4d4d4;
+  background: #f0f0f0;
+  border: 1px solid #d4d4d4;
+  color: #333333;
 }
 
 .btn-cancel:hover {
-  background: #4e4e4e;
+  background: #e0e0e0;
 }
 
 .btn-confirm {
-  background: #0e639c;
+  background: #007acc;
   color: #fff;
 }
 
 .btn-confirm:hover {
-  background: #1177bb;
+  background: #005a9e;
 }
 
 .btn-confirm.danger {

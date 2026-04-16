@@ -47,8 +47,8 @@ export default defineComponent({
 }
 
 .modal {
-  background: #252526;
-  border: 1px solid #3e3e42;
+  background: #ffffff;
+  border: 1px solid #d4d4d4;
   border-radius: 8px;
   overflow: hidden;
 }
@@ -62,11 +62,11 @@ export default defineComponent({
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background: #2d2d2d;
-  border-bottom: 1px solid #3e3e42;
+  background: #f5f5f5;
+  border-bottom: 1px solid #e0e0e0;
   font-size: 14px;
   font-weight: 500;
-  color: #d4d4d4;
+  color: #333333;
 }
 
 .modal-body {
@@ -74,7 +74,7 @@ export default defineComponent({
 }
 
 .modal-body p {
-  color: #d4d4d4;
+  color: #333333;
   line-height: 1.5;
   margin: 0;
 }
@@ -84,10 +84,11 @@ export default defineComponent({
   justify-content: flex-end;
   gap: 8px;
   padding: 12px 16px;
-  border-top: 1px solid #3e3e42;
+  border-top: 1px solid #e0e0e0;
 }
 
-.btn-cancel, .btn-confirm {
+.btn-cancel,
+.btn-confirm {
   padding: 6px 16px;
   border-radius: 4px;
   font-size: 13px;
@@ -97,12 +98,12 @@ export default defineComponent({
 
 .btn-cancel {
   background: transparent;
-  border: 1px solid #3e3e42;
-  color: #d4d4d4;
+  border: 1px solid #d4d4d4;
+  color: #333333;
 }
 
 .btn-cancel:hover {
-  background: #3e3e42;
+  background: #f0f0f0;
 }
 
 .btn-confirm {

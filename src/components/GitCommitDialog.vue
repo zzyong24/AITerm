@@ -6,7 +6,8 @@
           <span class="header-title">版本管理</span>
           <div class="header-badges" v-if="branch">
             <span class="branch-badge">{{ branch }}</span>
-            <span v-if="ahead > 0 || behind > 0" class="sync-badge" :class="{ 'has-ahead': ahead > 0, 'has-behind': behind > 0 }">
+            <span v-if="ahead > 0 || behind > 0" class="sync-badge"
+              :class="{ 'has-ahead': ahead > 0, 'has-behind': behind > 0 }">
               {{ ahead > 0 ? '↑' + ahead : '' }}{{ behind > 0 ? '↓' + behind : '' }}
             </span>
             <span v-if="remote" class="remote-badge" :title="remote">{{ remote }}</span>
@@ -59,22 +60,26 @@
           <button class="quick-select-btn" @click="selectByBadge('R')">R</button>
           <button class="quick-select-btn" @click="selectByBadge('C')">C</button>
         </div>
-        <input v-if="fileList.length > 0 && !hasManyFiles" v-model="commitMessage" type="text" class="commit-message-input" placeholder="输入提交信息..." />
+        <input v-if="fileList.length > 0 && !hasManyFiles" v-model="commitMessage" type="text"
+          class="commit-message-input" placeholder="输入提交信息..." />
       </div>
       <div class="modal-footer">
         <div class="footer-left">
-          <button class="btn-action" @click="$emit('pull')" :disabled="!remote || behind === 0 || committing" :class="{ loading: committing }" title="从远程拉取">
+          <button class="btn-action" @click="$emit('pull')" :disabled="!remote || behind === 0 || committing"
+            :class="{ loading: committing }" title="从远程拉取">
             <span v-if="committing" class="btn-spinner" />
             <span>拉取</span>
           </button>
-          <button class="btn-action" @click="$emit('push')" :disabled="!remote || ahead === 0 || committing" :class="{ loading: committing }" title="推送到远程">
+          <button class="btn-action" @click="$emit('push')" :disabled="!remote || ahead === 0 || committing"
+            :class="{ loading: committing }" title="推送到远程">
             <span v-if="committing" class="btn-spinner" />
             <span>推送</span>
           </button>
         </div>
         <div class="footer-right">
           <button class="btn-cancel" @click="$emit('cancel')" :disabled="committing">取消</button>
-          <button class="btn-confirm" :disabled="!canCommit || committing" :class="{ loading: committing }" @click="handleCommit">
+          <button class="btn-confirm" :disabled="!canCommit || committing" :class="{ loading: committing }"
+            @click="handleCommit">
             <span v-if="committing" class="btn-spinner" />
             <span>提交</span>
           </button>
@@ -245,8 +250,8 @@ export default defineComponent({
 }
 
 .modal {
-  background: #252526;
-  border: 1px solid #3e3e42;
+  background: #ffffff;
+  border: 1px solid #d4d4d4;
   border-radius: 8px;
   overflow: hidden;
 }
@@ -258,8 +263,8 @@ export default defineComponent({
 
 .modal-header {
   padding: 12px 16px;
-  background: #2d2d2d;
-  border-bottom: 1px solid #3e3e42;
+  background: #f5f5f5;
+  border-bottom: 1px solid #e0e0e0;
 }
 
 .header-info {
@@ -271,7 +276,7 @@ export default defineComponent({
 .header-title {
   font-size: 14px;
   font-weight: 500;
-  color: #d4d4d4;
+  color: #333333;
 }
 
 .header-badges {
@@ -283,7 +288,7 @@ export default defineComponent({
 
 .branch-badge {
   padding: 2px 8px;
-  background: #3c6e3c;
+  background: #4caf50;
   color: #fff;
   border-radius: 4px;
   font-size: 11px;
@@ -292,24 +297,24 @@ export default defineComponent({
 
 .sync-badge {
   padding: 2px 6px;
-  background: #3c3c3c;
-  color: #858585;
+  background: #f0f0f0;
+  color: #666666;
   border-radius: 4px;
   font-size: 10px;
   font-weight: 500;
 }
 
 .sync-badge.has-ahead {
-  color: #4ec9b0;
+  color: #2e7d32;
 }
 
 .sync-badge.has-behind {
-  color: #f48771;
+  color: #c42b1c;
 }
 
 .remote-badge {
   padding: 2px 6px;
-  background: #3c3c3c;
+  background: #f0f0f0;
   color: #007acc;
   border-radius: 4px;
   font-size: 10px;
@@ -326,14 +331,14 @@ export default defineComponent({
   gap: 8px;
   margin-top: 4px;
   font-size: 11px;
-  color: #858585;
+  color: #666666;
 }
 
 .commit-hash {
   padding: 1px 4px;
-  background: #3c3c3c;
+  background: #f0f0f0;
   border-radius: 3px;
-  color: #4ec9b0;
+  color: #2e7d32;
   font-family: 'Menlo', 'Monaco', monospace;
   font-size: 10px;
 }
@@ -343,12 +348,12 @@ export default defineComponent({
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #d4d4d4;
+  color: #333333;
 }
 
 .commit-date {
   flex-shrink: 0;
-  color: #858585;
+  color: #666666;
 }
 
 .modal-body {
@@ -361,7 +366,7 @@ export default defineComponent({
 
 .commit-loading,
 .commit-empty {
-  color: #858585;
+  color: #666666;
   font-size: 13px;
   text-align: center;
   padding: 12px 0;
@@ -369,19 +374,19 @@ export default defineComponent({
 
 .commit-warning {
   padding: 10px 12px;
-  background: #5a1d1d;
+  background: #fce8e6;
   border: 1px solid #c42b1c;
   border-radius: 4px;
-  color: #f48771;
+  color: #c42b1c;
   font-size: 12px;
   line-height: 1.6;
 }
 
 .commit-warning code {
-  background: #3c3c3c;
+  background: #f0f0f0;
   padding: 1px 4px;
   border-radius: 3px;
-  color: #d4d4d4;
+  color: #333333;
   font-family: 'Menlo', 'Monaco', monospace;
   font-size: 11px;
 }
@@ -397,7 +402,7 @@ export default defineComponent({
 .commit-overflow {
   padding: 6px 0;
   font-size: 11px;
-  color: #f48771;
+  color: #c42b1c;
   text-align: center;
 }
 
@@ -407,7 +412,7 @@ export default defineComponent({
   gap: 8px;
   padding: 4px 0;
   cursor: pointer;
-  color: #d4d4d4;
+  color: #333333;
   font-size: 12px;
 }
 
@@ -420,7 +425,7 @@ export default defineComponent({
 }
 
 .commit-select-all {
-  border-bottom: 1px solid #3e3e42;
+  border-bottom: 1px solid #e0e0e0;
   padding-bottom: 6px !important;
   margin-bottom: 4px;
   font-weight: 500;

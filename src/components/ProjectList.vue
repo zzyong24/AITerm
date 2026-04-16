@@ -1701,34 +1701,34 @@ export default defineComponent({
 
 .context-menu {
   position: fixed;
-  background: #252526;
-  border: 1px solid #3e3e42;
+  background: #ffffff;
+  border: 1px solid #d4d4d4;
   border-radius: 4px;
   padding: 4px 0;
   min-width: 160px;
   z-index: 99999;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .context-menu-item {
   padding: 6px 12px;
   cursor: pointer;
-  color: #d4d4d4;
+  color: #333333;
   font-size: 13px;
 }
 
 .context-menu-item:hover {
-  background: #094771;
+  background: #e8f0fe;
 }
 
 .context-menu-item.danger:hover {
-  background: #5a1d1d;
-  color: #f48771;
+  background: #fce8e6;
+  color: #c42b1c;
 }
 
 .context-menu-separator {
   height: 1px;
-  background: #3e3e42;
+  background: #e0e0e0;
   margin: 4px 0;
 }
 
@@ -1775,8 +1775,8 @@ export default defineComponent({
 }
 
 .modal {
-  background: #252526;
-  border: 1px solid #3e3e42;
+  background: #ffffff;
+  border: 1px solid #d4d4d4;
   border-radius: 8px;
   width: 400px;
   max-width: 90vw;
@@ -1784,11 +1784,12 @@ export default defineComponent({
 
 .modal-header {
   padding: 12px 16px;
-  border-bottom: 1px solid #3e3e42;
+  border-bottom: 1px solid #e0e0e0;
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-weight: 600;
+  color: #333333;
 }
 
 .modal-close {
@@ -1800,7 +1801,7 @@ export default defineComponent({
 }
 
 .modal-close:hover {
-  color: #d4d4d4;
+  color: #333333;
 }
 
 .modal-body {
@@ -1810,16 +1811,16 @@ export default defineComponent({
 .modal-body label {
   display: block;
   margin-bottom: 12px;
-  color: #d4d4d4;
+  color: #333333;
 }
 
 .modal-body input {
   width: 100%;
   padding: 8px;
-  background: #3c3c3c;
-  border: 1px solid #3e3e42;
+  background: #ffffff;
+  border: 1px solid #d4d4d4;
   border-radius: 4px;
-  color: #d4d4d4;
+  color: #333333;
   font-size: 14px;
   margin-top: 4px;
 }
@@ -1840,7 +1841,7 @@ export default defineComponent({
 
 .path-input-row button {
   padding: 8px 12px;
-  background: #0e639c;
+  background: #007acc;
   border: none;
   border-radius: 4px;
   color: #fff;
@@ -1848,12 +1849,12 @@ export default defineComponent({
 }
 
 .path-input-row button:hover {
-  background: #1177bb;
+  background: #005a9e;
 }
 
 .modal-footer {
   padding: 12px 16px;
-  border-top: 1px solid #3e3e42;
+  border-top: 1px solid #e0e0e0;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
@@ -1861,20 +1862,20 @@ export default defineComponent({
 
 .btn-cancel {
   padding: 6px 12px;
-  background: #3e3e42;
-  border: none;
+  background: #f0f0f0;
+  border: 1px solid #d4d4d4;
   border-radius: 4px;
-  color: #d4d4d4;
+  color: #333333;
   cursor: pointer;
 }
 
 .btn-cancel:hover {
-  background: #4e4e4e;
+  background: #e0e0e0;
 }
 
 .btn-confirm {
   padding: 6px 12px;
-  background: #0e639c;
+  background: #007acc;
   border: none;
   border-radius: 4px;
   color: #fff;
@@ -1882,7 +1883,7 @@ export default defineComponent({
 }
 
 .btn-confirm:hover:not(:disabled) {
-  background: #1177bb;
+  background: #005a9e;
 }
 
 .btn-confirm:disabled {
