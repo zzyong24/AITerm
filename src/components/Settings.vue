@@ -9,24 +9,14 @@
         <div class="setting-item">
           <label>编辑器路径</label>
           <div class="path-input-row">
-            <input
-              v-model="editorPath"
-              type="text"
-              placeholder="例如: /Applications/Visual Studio Code.app"
-            />
+            <input v-model="editorPath" type="text" placeholder="例如: /Applications/Visual Studio Code.app" />
             <button @click="handleBrowse">浏览</button>
           </div>
           <p class="setting-hint">留空则自动检测，或手动指定 VS Code、Cursor 等编辑器</p>
         </div>
         <div class="setting-item">
           <label>终端字体大小</label>
-          <input
-            v-model.number="terminalFontSize"
-            type="number"
-            min="8"
-            max="32"
-            class="font-size-input"
-          />
+          <input v-model.number="terminalFontSize" type="number" min="8" max="32" class="font-size-input" />
           <p class="setting-hint">范围: 8 ~ 32，默认 14</p>
         </div>
       </div>
@@ -58,8 +48,10 @@ export default defineComponent({
 
   mounted() {
     eventBus.on(AppEvents.SETTINGS_CHANGE, this.handleSettingsChange)
+    // 确保从 appBusiness 读取最新值
     this.editorPath = appBusiness.editorPath
     this.terminalFontSize = appBusiness.terminalFontSize
+    console.log('[Settings] mounted, terminalFontSize:', this.terminalFontSize)
   },
 
   beforeUnmount() {
@@ -68,6 +60,7 @@ export default defineComponent({
 
   methods: {
     handleSettingsChange(data: { sidebarCollapsed: boolean; showSettings: boolean; editorPath: string; terminalFontSize: number }) {
+      console.log('[Settings] SETTINGS_CHANGE received:', data)
       this.editorPath = data.editorPath
       this.terminalFontSize = data.terminalFontSize
     },
@@ -84,8 +77,9 @@ export default defineComponent({
     },
 
     async handleSave() {
-      appBusiness.setEditorPath(this.editorPath)
       const fontSize = Math.max(8, Math.min(32, Number(this.terminalFontSize) || 14))
+      console.log('[Settings] Saving terminalFontSize:', fontSize)
+      appBusiness.setEditorPath(this.editorPath)
       appBusiness.setTerminalFontSize(fontSize)
       this.$emit('close')
     }

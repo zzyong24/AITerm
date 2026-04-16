@@ -269,16 +269,19 @@ class AppBusinessClass {
   // ============ 初始化 ============
   async initialize() {
     try {
+      console.log('[AppBusiness] Starting initialization...')
       const [projects, homeDir, editorPath, terminalFontSize] = await Promise.all([
         apiGetProjects(),
         apiGetHomeDir(),
         apiGetEditorPath(),
         apiGetTerminalFontSize()
       ])
+      console.log('[AppBusiness] API results:', { projects: projects.length, homeDir, editorPath, terminalFontSize })
       this.projects = projects
       this.homeDir = homeDir
       this.editorPath = editorPath || ''
       this.terminalFontSize = terminalFontSize || 14
+      console.log('[AppBusiness] After assignment, terminalFontSize:', this.terminalFontSize)
       this.notifyInitialized()
       this.notifyProjectsChange()
       this.notifySettingsChange()
@@ -306,7 +309,10 @@ class AppBusinessClass {
         this.editorPath = ''
       }
       try {
-        this.terminalFontSize = await apiGetTerminalFontSize() || 14
+        const fontSize = await apiGetTerminalFontSize()
+        console.log('[AppBusiness] Got terminalFontSize from API:', fontSize)
+        this.terminalFontSize = fontSize || 14
+        console.log('[AppBusiness] After catch assignment, terminalFontSize:', this.terminalFontSize)
       } catch (err) {
         console.error('Failed to get terminal font size:', err)
         this.terminalFontSize = 14

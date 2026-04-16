@@ -19,7 +19,7 @@ export class ProjectService {
       mkdirSync(dir, { recursive: true })
     }
     if (!existsSync(this.storePath)) {
-      writeFileSync(this.storePath, JSON.stringify({ projects: [], settings: { editorPath: null } }, null, 2))
+      writeFileSync(this.storePath, JSON.stringify({ projects: [], settings: { editorPath: null, terminalFontSize: 14 } }, null, 2))
     }
   }
 
@@ -33,14 +33,14 @@ export class ProjectService {
           store.projects = []
         }
         if (!store.settings) {
-          store.settings = { editorPath: null }
+          store.settings = { editorPath: null, terminalFontSize: 14 }
         }
         return store
       }
     } catch (e) {
       console.error('Failed to load project store:', e)
     }
-    return { projects: [], settings: { editorPath: null } }
+    return { projects: [], settings: { editorPath: null, terminalFontSize: 14 } }
   }
 
   saveStore(store) {
@@ -102,6 +102,17 @@ export class ProjectService {
     store.settings.editorPath = editorPath
     this.saveStore(store)
     console.log(`Set editor path: ${editorPath}`)
+  }
+
+  getTerminalFontSize() {
+    return this.loadStore().settings.terminalFontSize || 14
+  }
+
+  setTerminalFontSize(fontSize) {
+    const store = this.loadStore()
+    store.settings.terminalFontSize = fontSize
+    this.saveStore(store)
+    console.log(`Set terminal font size: ${fontSize}`)
   }
 
   openInEditor(projectPath) {

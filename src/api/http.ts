@@ -118,9 +118,15 @@ export const setEditorPath = (editorPath: string | null) =>
     body: JSON.stringify({ editorPath }),
   })
 
-// 终端字体大小 - HTTP 模式下使用默认值
-export const getTerminalFontSize = () => Promise.resolve(14)
-export const setTerminalFontSize = (_fontSize: number) => Promise.resolve()
+// 终端字体大小
+export const getTerminalFontSize = () =>
+  apiCall<{ fontSize: number }>('/settings/terminal-font-size').then(res => res.fontSize)
+
+export const setTerminalFontSize = (fontSize: number) =>
+  apiCall<void>('/settings/terminal-font-size', {
+    method: 'POST',
+    body: JSON.stringify({ fontSize }),
+  })
 
 export const openProjectInEditor = (projectPath: string) =>
   apiCall<void>('/open-in-editor', {

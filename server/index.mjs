@@ -112,6 +112,17 @@ app.post('/api/settings/editor', (req, res) => {
   res.json({ success: true })
 })
 
+// 终端字体大小设置
+app.get('/api/settings/terminal-font-size', (_, res) => {
+  res.json({ fontSize: projectService.getTerminalFontSize() })
+})
+
+app.post('/api/settings/terminal-font-size', (req, res) => {
+  const { fontSize } = req.body
+  projectService.setTerminalFontSize(fontSize)
+  res.json({ success: true })
+})
+
 app.post('/api/open-in-editor', async (req, res) => {
   try {
     const { projectPath } = req.body
