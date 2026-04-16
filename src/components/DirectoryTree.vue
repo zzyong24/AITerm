@@ -32,6 +32,8 @@
       <div class="context-menu-item" v-if="!contextMenu.isDirectory" @click="handleEditFile">编辑</div>
       <div class="context-menu-item" @click="handleOpenInEditor">在编辑器中打开</div>
       <div class="context-menu-separator" />
+      <div class="context-menu-item" @click="handleRefresh">刷新</div>
+      <div class="context-menu-separator" v-if="contextMenu.isDirectory" />
       <div class="context-menu-item" v-if="contextMenu.isDirectory" @click="handleOpenCommitDialog">版本管理</div>
       <div class="context-menu-separator" v-if="contextMenu.isDirectory" />
       <div class="context-menu-item danger" @click="handleDelete">删除</div>
@@ -113,7 +115,7 @@ export default defineComponent({
     }
   },
 
-  emits: ['node-click', 'open-editor', 'open-terminal', 'search-in-directory'],
+  emits: ['node-click', 'open-editor', 'open-terminal', 'search-in-directory', 'refresh'],
 
   data() {
     return {
@@ -390,6 +392,11 @@ export default defineComponent({
       } catch (e) {
         alert(`复制失败: ${e}`)
       }
+      this.closeContextMenu()
+    },
+
+    handleRefresh() {
+      this.$emit('refresh', this.contextMenu.path)
       this.closeContextMenu()
     },
 

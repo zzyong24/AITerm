@@ -68,7 +68,8 @@
                 <!-- 目录树 -->
                 <div v-if="expandedId === project.id" class="project-tree-container">
                   <DirectoryTree :root-path="project.path" @node-click="handleTreeNodeClick"
-                    @open-editor="handleOpenEditor" @search-in-directory="handleSearchInDirectory" />
+                    @open-editor="handleOpenEditor" @search-in-directory="handleSearchInDirectory"
+                    @refresh="handleRefreshDirectory" />
                 </div>
               </div>
             </div>
@@ -989,7 +990,14 @@ export default defineComponent({
       let preview = result.preview.trim()
       const query = this.searchQuery.trim()
 
-      if (preview.length <= 60) {
+      // 如果preview包含多行，取中间那一行
+      const lines = preview.split('\n')
+      if (lines.length > 1) {
+        const middleIndex = Math.floor(lines.length / 2)
+        preview = lines[middleIndex].trim()
+      }
+
+      if (preview.length <= 30) {
         return preview
       }
 
@@ -1001,7 +1009,7 @@ export default defineComponent({
 
         if (queryIndex !== -1) {
           // 计算裁剪的起始位置，让查询内容尽量居中
-          const contextLength = 25 // 查询前后各保留多少字符
+          const contextLength = 10 // 查询前后各保留多少字符
           let start = Math.max(0, queryIndex - contextLength)
           let end = Math.min(preview.length, queryIndex + query.length + contextLength)
 
@@ -1019,7 +1027,7 @@ export default defineComponent({
       }
 
       // 默认裁剪方式：取前面部分
-      return preview.substring(0, 60) + '...'
+      return preview.substring(0, 30) + '...'
     },
 
     selectSearchPath(path: string) {
@@ -1050,6 +1058,16 @@ export default defineComponent({
         this.searchQuery = ''
       }
       this.closeContextMenu()
+    },
+
+    handleRefreshDirectory(dirPath: string) {
+      // 触发目录树重新加载
+      // 通过切换 expandedId 来强制刷新
+      const currentExpanded = this.expandedId
+      this.expandedId = null
+      this.$nextTick(() => {
+        this.expandedId = currentExpanded
+      })
     },
 
     handleOpenFile() {

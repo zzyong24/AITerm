@@ -416,6 +416,26 @@ app.post('/api/git-pull', async (req, res) => {
   }
 })
 
+app.post('/api/git-unstage-file', async (req, res) => {
+  try {
+    const { repoPath, filePath } = req.body
+    const result = await gitService.unstageFile(repoPath, filePath)
+    res.json(result)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.post('/api/git-discard-changes', async (req, res) => {
+  try {
+    const { repoPath, filePath } = req.body
+    const result = await gitService.discardChanges(repoPath, filePath)
+    res.json(result)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
 // WebSocket 用于终端输出推送
 import { WebSocketServer } from 'ws'
 

@@ -150,10 +150,10 @@ export const isGitIgnored = (path: string) =>
 
 // 搜索相关
 export const searchInDirectory = (dirPath: string, query: string) =>
-  window.electronAPI.invoke<{ file: string; path: string; line: number }[]>('search-in-directory', dirPath, query)
+  window.electronAPI.invoke<{ file: string; path: string; line: number; preview?: string }[]>('search-in-directory', dirPath, query)
 
-export const searchFileContent = (dirPath: string, query: string) =>
-  window.electronAPI.invoke<{ file: string; path: string; line: number }[]>('search-file-content', dirPath, query)
+export const searchFileContent = (dirPath: string, query: string, maxResults: number = 200, extensions?: string) =>
+  window.electronAPI.invoke<{ file: string; path: string; line: number; preview?: string }[]>('search-file-content', dirPath, query, maxResults, extensions)
 
 // Git
 export const getGitStatus = (path: string) =>
@@ -243,8 +243,8 @@ export const terminalActivityListener = (callback: (data: { session_id: string; 
 
 // WebSocket 类 (空的，因为在 Electron 中不需要)
 export const terminalWs = {
-  connect: () => {},
-  disconnect: () => {}
+  connect: () => { },
+  disconnect: () => { }
 }
 
 // 窗口控制

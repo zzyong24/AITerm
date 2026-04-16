@@ -114,6 +114,26 @@ export class GitService {
     }
   }
 
+  async unstageFile(repoPath, filePath) {
+    try {
+      const git = simpleGit(repoPath)
+      await git.reset(['HEAD', '--', filePath])
+      return { success: true, message: `已取消暂存文件: ${filePath}` }
+    } catch (e) {
+      return { success: false, message: `取消暂存失败: ${e.message}` }
+    }
+  }
+
+  async discardChanges(repoPath, filePath) {
+    try {
+      const git = simpleGit(repoPath)
+      await git.checkout(['--', filePath])
+      return { success: true, message: `已丢弃更改: ${filePath}` }
+    } catch (e) {
+      return { success: false, message: `丢弃更改失败: ${e.message}` }
+    }
+  }
+
   async getStatusBrief(repoPath) {
     try {
       const git = simpleGit(repoPath, { timeout: { block: 2000 } })

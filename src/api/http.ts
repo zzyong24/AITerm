@@ -243,11 +243,17 @@ export const gitStageAll = (repoPath: string) =>
     body: JSON.stringify({ repoPath }),
   })
 
-export const gitUnstageFile = (_repoPath: string, _filePath: string) =>
-  Promise.resolve({ success: false, message: '取消暂存在浏览器模式下暂不支持' } as { success: boolean; message: string })
+export const gitUnstageFile = (repoPath: string, filePath: string) =>
+  apiCall<{ success: boolean; message: string }>('/git-unstage-file', {
+    method: 'POST',
+    body: JSON.stringify({ repoPath, filePath }),
+  })
 
-export const gitDiscardChanges = (_repoPath: string, _filePath: string) =>
-  Promise.resolve({ success: false, message: '丢弃更改在浏览器模式下暂不支持' } as { success: boolean; message: string })
+export const gitDiscardChanges = (repoPath: string, filePath: string) =>
+  apiCall<{ success: boolean; message: string }>('/git-discard-changes', {
+    method: 'POST',
+    body: JSON.stringify({ repoPath, filePath }),
+  })
 
 export const gitCommit = (repoPath: string, message: string, files: string[] = []) =>
   apiCall<{ success: boolean; message: string }>('/git-commit', {

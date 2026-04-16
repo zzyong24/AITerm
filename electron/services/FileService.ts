@@ -75,7 +75,7 @@ export class FileService {
             modifiedPaths.add(absPath)
           })
         }
-      } catch {}
+      } catch { }
 
       const results = []
       for (const name of filtered) {
@@ -84,10 +84,10 @@ export class FileService {
         let isGitIgnored = false
         try {
           isDir = statSync(fullPath).isDirectory()
-        } catch {}
+        } catch { }
         try {
           isGitIgnored = this.isGitIgnored(fullPath)
-        } catch {}
+        } catch { }
         const hasGitDir = isDir && existsSync(join(fullPath, '.git'))
         results.push({
           name,
@@ -284,8 +284,15 @@ export class FileService {
     return results
   }
 
-  async searchFileContent(dirPath: string, query: string, maxResults: number = 100): Promise<SearchResult[]> {
+  async searchFileContent(dirPath: string, query: string, maxResults: number = 100, extensions?: string): Promise<SearchResult[]> {
     const results: SearchResult[] = []
+
+    const matchesExtension = (filename: string): boolean => {
+      if (!extensions || extensions === '*.*' || extensions.trim() === '') return true
+      const exts = extensions.split(',').map(e => e.trim().toLowerCase())
+      const fileExt = '.' + filename.split('.').pop()?.toLowerCase()
+      return exts.includes(fileExt)
+    }
 
     const searchRecursive = async (currentPath: string, depth: number = 0) => {
       if (results.length >= maxResults) return
@@ -308,6 +315,9 @@ export class FileService {
             } else {
               // Skip binary files
               if (this.isBinaryFile(entry)) continue
+
+              // Check extension filter
+              if (!matchesExtension(entry)) continue
 
               // Search in file content
               const content = readFileSync(fullPath, 'utf-8')
@@ -358,7 +368,7 @@ export class FileService {
       previewLines.push(`${lineNum}: ${displayLine}`)
     }
 
-return previewLines.join('\n')
+    return previewLines.join('\n')
   }
 
   async readFile(path: string): Promise<string> {
@@ -370,7 +380,7 @@ return previewLines.join('\n')
     }
   }
 
-async writeFile(path: string, content: string): Promise<void> {
+  async writeFile(path: string, content: string): Promise<void> {
     try {
       writeFileSync(path, content, 'utf-8')
     } catch (e) {
@@ -400,7 +410,7 @@ async writeFile(path: string, content: string): Promise<void> {
       if (existsSync(historyFile)) {
         try {
           existingHistory = JSON.parse(readFileSync(historyFile, 'utf-8'))
-        } catch {}
+        } catch { }
       }
       // 更新当前目录的历史
       const dirIndex = existingHistory.findIndex(h => h.dir === workingDir)

@@ -479,10 +479,10 @@ export default defineComponent({
 .commit-message-input {
   width: 100%;
   padding: 8px 10px;
-  background: #3c3c3c;
-  border: 1px solid #3e3e42;
+  background: #ffffff;
+  border: 1px solid #d4d4d4;
   border-radius: 4px;
-  color: #d4d4d4;
+  color: #333333;
   font-size: 13px;
   outline: none;
 }
@@ -503,7 +503,7 @@ export default defineComponent({
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  color: #858585;
+  color: #666666;
 }
 
 .commit-quick-select {
@@ -514,23 +514,23 @@ export default defineComponent({
 
 .quick-select-label {
   font-size: 11px;
-  color: #858585;
+  color: #666666;
   margin-right: 2px;
 }
 
 .quick-select-btn {
   padding: 2px 6px;
-  background: #3c3c3c;
-  border: 1px solid #3e3e42;
+  background: #f0f0f0;
+  border: 1px solid #d4d4d4;
   border-radius: 3px;
-  color: #d4d4d4;
+  color: #333333;
   font-size: 10px;
   cursor: pointer;
   transition: all 0.15s;
 }
 
 .quick-select-btn:hover {
-  background: #4e4e4e;
+  background: #e0e0e0;
   border-color: #007acc;
 }
 
@@ -540,7 +540,7 @@ export default defineComponent({
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  border-top: 1px solid #3e3e42;
+  border-top: 1px solid #e0e0e0;
 }
 
 .footer-left {
@@ -565,12 +565,12 @@ export default defineComponent({
 
 .btn-cancel {
   background: transparent;
-  border: 1px solid #3e3e42;
-  color: #d4d4d4;
+  border: 1px solid #d4d4d4;
+  color: #333333;
 }
 
 .btn-cancel:hover {
-  background: #3e3e42;
+  background: #f0f0f0;
 }
 
 .btn-confirm {
@@ -589,13 +589,13 @@ export default defineComponent({
 }
 
 .btn-action {
-  background: #3c3c3c;
-  border: 1px solid #3e3e42;
-  color: #d4d4d4;
+  background: #f0f0f0;
+  border: 1px solid #d4d4d4;
+  color: #333333;
 }
 
 .btn-action:hover:not(:disabled) {
-  background: #4e4e4e;
+  background: #e0e0e0;
   border-color: #007acc;
 }
 

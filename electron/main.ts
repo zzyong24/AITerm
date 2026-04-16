@@ -278,8 +278,8 @@ function registerIpcHandlers() {
     return await fileService.searchInDirectory(dirPath, query)
   })
 
-  ipcMain.handle('search-file-content', async (_, dirPath: string, query: string) => {
-    return await fileService.searchFileContent(dirPath, query)
+  ipcMain.handle('search-file-content', async (_, dirPath: string, query: string, maxResults: number = 200, extensions?: string) => {
+    return await fileService.searchFileContent(dirPath, query, maxResults, extensions)
   })
 
   ipcMain.handle('exec-command', async (_, command: string, cwd: string) => {
