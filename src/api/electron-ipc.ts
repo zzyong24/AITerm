@@ -6,6 +6,10 @@ export interface Project {
   name: string
   path: string
   group: string | null
+  git?: {
+    isRepo: boolean
+    changesCount: number
+  }
 }
 
 export interface SessionInfo {
@@ -22,6 +26,10 @@ export interface GitStatus {
   staged: string[]
   modified: string[]
   untracked: string[]
+  created: string[]
+  deleted: string[]
+  renamed: string[]
+  conflicted: string[]
   isRepo: boolean
 }
 
@@ -113,6 +121,7 @@ export interface DirEntryInfo {
   isGitIgnored: boolean
   isUntracked: boolean
   isModified: boolean
+  hasGitDir: boolean
 }
 
 export const readDirectoryBatch = (path: string, showHidden: boolean): Promise<DirEntryInfo[]> =>
@@ -150,6 +159,15 @@ export const searchFileContent = (dirPath: string, query: string) =>
 export const getGitStatus = (path: string) =>
   window.electronAPI.invoke<GitStatus>('get-git-status', path)
 
+export const getGitRepoBrief = (path: string) =>
+  window.electronAPI.invoke<{ isRepo: boolean; changesCount: number; rootPath?: string }>('get-git-repo-brief', path)
+
+export const getGitRemote = (path: string) =>
+  window.electronAPI.invoke<{ remote: string; remoteUrl: string }>('get-git-remote', path)
+
+export const getGitLastCommit = (path: string) =>
+  window.electronAPI.invoke<{ hash: string; date: string; message: string }>('get-git-last-commit', path)
+
 export interface GitOperationResult {
   success: boolean
   message: string
@@ -164,8 +182,8 @@ export const gitStageAll = (repoPath: string) =>
 export const gitUnstageFile = (repoPath: string, filePath: string) =>
   window.electronAPI.invoke<GitOperationResult>('git-unstage-file', repoPath, filePath)
 
-export const gitCommit = (repoPath: string, message: string) =>
-  window.electronAPI.invoke<GitOperationResult>('git-commit', repoPath, message)
+export const gitCommit = (repoPath: string, message: string, files: string[] = []) =>
+  window.electronAPI.invoke<GitOperationResult>('git-commit', repoPath, message, files)
 
 export const gitPush = (repoPath: string) =>
   window.electronAPI.invoke<GitOperationResult>('git-push', repoPath)
@@ -175,6 +193,14 @@ export const gitPull = (repoPath: string) =>
 
 export const gitDiscardChanges = (repoPath: string, filePath: string) =>
   window.electronAPI.invoke<GitOperationResult>('git-discard-changes', repoPath, filePath)
+
+// 执行命令行
+export const execCommand = (command: string, cwd: string) =>
+  window.electronAPI.invoke<{ success: boolean; output?: string; error?: string }>('exec-command', command, cwd)
+
+// 外部链接
+export const openExternal = (url: string) =>
+  window.electronAPI.invoke('open-external', url)
 
 // 终端历史
 export interface HistoryEntry {

@@ -57,8 +57,17 @@ app.get('/api/terminals', (_, res) => {
 })
 
 // 项目相关 API
-app.get('/api/projects', (_, res) => {
-  res.json(projectService.getProjects())
+app.get('/api/projects', async (_, res) => {
+  try {
+    const projects = projectService.getProjects()
+    const result = await Promise.all(projects.map(async (p) => {
+      const brief = await gitService.getStatusBrief(p.path)
+      return { ...p, git: brief }
+    }))
+    res.json(result)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
 })
 
 app.post('/api/projects', (req, res) => {
@@ -294,10 +303,13 @@ app.post('/api/search-in-directory', async (req, res) => {
 
 app.post('/api/search-file-content', async (req, res) => {
   try {
-    const { dirPath, query } = req.body
-    const results = await fileService.searchFileContent(dirPath, query)
+    const { dirPath, query, maxResults, extensions } = req.body
+    console.log('[Server] searchFileContent:', { dirPath, query, maxResults, extensions })
+    const results = await fileService.searchFileContent(dirPath, query, maxResults, extensions)
+    console.log('[Server] search results count:', results.length)
     res.json(results)
   } catch (e) {
+    console.error('[Server] search error:', e)
     res.status(500).json({ error: e.message })
   }
 })
@@ -313,10 +325,50 @@ app.get('/api/git-status', async (req, res) => {
   }
 })
 
+app.get('/api/git-repo-brief', async (req, res) => {
+  try {
+    const { path } = req.query
+    const brief = await gitService.getStatusBrief(path)
+    res.json(brief)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.get('/api/git-remote', async (req, res) => {
+  try {
+    const { path } = req.query
+    const remote = await gitService.getRemote(path)
+    res.json(remote)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.get('/api/git-last-commit', async (req, res) => {
+  try {
+    const { path } = req.query
+    const commit = await gitService.getLastCommit(path)
+    res.json(commit)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
 app.post('/api/git-stage-all', async (req, res) => {
   try {
-    const { path } = req.body
-    const result = await gitService.stageAll(path)
+    const { repoPath } = req.body
+    const result = await gitService.stageAll(repoPath)
+    res.json(result)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.post('/api/git-stage-file', async (req, res) => {
+  try {
+    const { repoPath, filePath } = req.body
+    const result = await gitService.stageFile(repoPath, filePath)
     res.json(result)
   } catch (e) {
     res.status(500).json({ error: e.message })
@@ -325,8 +377,8 @@ app.post('/api/git-stage-all', async (req, res) => {
 
 app.post('/api/git-commit', async (req, res) => {
   try {
-    const { path, message } = req.body
-    const result = await gitService.commit(path, message)
+    const { repoPath, message, files } = req.body
+    const result = await gitService.commit(repoPath, message, files)
     res.json(result)
   } catch (e) {
     res.status(500).json({ error: e.message })
@@ -335,8 +387,8 @@ app.post('/api/git-commit', async (req, res) => {
 
 app.post('/api/git-push', async (req, res) => {
   try {
-    const { path } = req.body
-    const result = await gitService.push(path)
+    const { repoPath } = req.body
+    const result = await gitService.push(repoPath)
     res.json(result)
   } catch (e) {
     res.status(500).json({ error: e.message })
@@ -345,8 +397,8 @@ app.post('/api/git-push', async (req, res) => {
 
 app.post('/api/git-pull', async (req, res) => {
   try {
-    const { path } = req.body
-    const result = await gitService.pull(path)
+    const { repoPath } = req.body
+    const result = await gitService.pull(repoPath)
     res.json(result)
   } catch (e) {
     res.status(500).json({ error: e.message })

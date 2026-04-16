@@ -6,6 +6,10 @@ export interface Project {
   name: string
   path: string
   group: string | null
+  git?: {
+    isRepo: boolean
+    changesCount: number
+  }
 }
 
 export interface SessionInfo {
@@ -22,6 +26,10 @@ export interface GitStatus {
   staged: string[]
   modified: string[]
   untracked: string[]
+  created: string[]
+  deleted: string[]
+  renamed: string[]
+  conflicted: string[]
   isRepo: boolean
 }
 
@@ -139,6 +147,7 @@ export interface DirEntryInfo {
   isGitIgnored: boolean
   isUntracked: boolean
   isModified: boolean
+  hasGitDir: boolean
 }
 
 export const readDirectoryBatch = (path: string, showHidden: boolean): Promise<DirEntryInfo[]> =>
@@ -197,18 +206,30 @@ export const searchInDirectory = (dirPath: string, query: string) =>
     body: JSON.stringify({ dirPath, query }),
   })
 
-export const searchFileContent = (dirPath: string, query: string) =>
+export const searchFileContent = (dirPath: string, query: string, maxResults: number = 200, extensions?: string) =>
   apiCall<SearchResult[]>('/search-file-content', {
     method: 'POST',
-    body: JSON.stringify({ dirPath, query }),
+    body: JSON.stringify({ dirPath, query, maxResults, extensions }),
   })
 
 // Git
 export const getGitStatus = (path: string) =>
   apiCall<GitStatus>('/git-status?path=' + encodeURIComponent(path))
 
-export const gitStageFile = (_repoPath: string, _filePath: string) =>
-  Promise.resolve({ success: false, message: '暂存单个文件在浏览器模式下暂不支持' } as { success: boolean; message: string })
+export const getGitRepoBrief = (path: string) =>
+  apiCall<{ isRepo: boolean; changesCount: number; rootPath?: string }>('/git-repo-brief?path=' + encodeURIComponent(path))
+
+export const getGitRemote = (path: string) =>
+  apiCall<{ remote: string; remoteUrl: string }>('/git-remote?path=' + encodeURIComponent(path))
+
+export const getGitLastCommit = (path: string) =>
+  apiCall<{ hash: string; date: string; message: string }>('/git-last-commit?path=' + encodeURIComponent(path))
+
+export const gitStageFile = (repoPath: string, filePath: string) =>
+  apiCall<{ success: boolean; message: string }>('/git-stage-file', {
+    method: 'POST',
+    body: JSON.stringify({ repoPath, filePath }),
+  })
 
 export const gitStageAll = (repoPath: string) =>
   apiCall<{ success: boolean; message: string }>('/git-stage-all', {
@@ -222,10 +243,10 @@ export const gitUnstageFile = (_repoPath: string, _filePath: string) =>
 export const gitDiscardChanges = (_repoPath: string, _filePath: string) =>
   Promise.resolve({ success: false, message: '丢弃更改在浏览器模式下暂不支持' } as { success: boolean; message: string })
 
-export const gitCommit = (repoPath: string, message: string) =>
+export const gitCommit = (repoPath: string, message: string, files: string[] = []) =>
   apiCall<{ success: boolean; message: string }>('/git-commit', {
     method: 'POST',
-    body: JSON.stringify({ repoPath, message }),
+    body: JSON.stringify({ repoPath, message, files }),
   })
 
 export const gitPush = (repoPath: string) =>
@@ -245,6 +266,12 @@ export const execCommand = (command: string, cwd: string) =>
     method: 'POST',
     body: JSON.stringify({ command, cwd }),
   })
+
+// 外部链接 (浏览器模式下使用 window.open)
+export const openExternal = (url: string) => {
+  window.open(url, '_blank')
+  return Promise.resolve()
+}
 
 // 窗口控制 (浏览器模式下的空实现)
 export const windowMinimize = () => Promise.resolve()

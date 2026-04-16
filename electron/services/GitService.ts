@@ -8,6 +8,10 @@ export interface GitStatus {
   staged: string[]
   modified: string[]
   untracked: string[]
+  created: string[]
+  deleted: string[]
+  renamed: string[]
+  conflicted: string[]
   isRepo: boolean
 }
 
@@ -30,6 +34,10 @@ export class GitService {
           staged: [],
           modified: [],
           untracked: [],
+          created: [],
+          deleted: [],
+          renamed: [],
+          conflicted: [],
           isRepo: false
         }
       }
@@ -46,6 +54,10 @@ export class GitService {
         staged: status.staged,
         modified: status.modified,
         untracked: status.not_added,
+        created: status.created,
+        deleted: status.deleted,
+        renamed: (status.renamed || []).map((r: any) => r.to || r.from),
+        conflicted: status.conflicted,
         isRepo: true
       }
     } catch (e) {
@@ -57,6 +69,10 @@ export class GitService {
         staged: [],
         modified: [],
         untracked: [],
+        created: [],
+        deleted: [],
+        renamed: [],
+        conflicted: [],
         isRepo: false
       }
     }
@@ -98,9 +114,13 @@ export class GitService {
     }
   }
 
-  async commit(repoPath: string, message: string): Promise<GitOperationResult> {
+  async commit(repoPath: string, message: string, files: string[] = []): Promise<GitOperationResult> {
     try {
       const git: SimpleGit = simpleGit(repoPath)
+      for (const file of files) {
+        const absPath = file.startsWith('/') ? file : (repoPath.endsWith('/') ? repoPath + file : repoPath + '/' + file)
+        await git.add(absPath)
+      }
       const result = await git.commit(message)
       if (!result.commit || result.summary.changes === 0) {
         return { success: false, message: '没有要提交的更改，请先暂存文件' }
@@ -146,6 +166,69 @@ export class GitService {
     } catch (e) {
       log.error(`Failed to discard changes for ${filePath}:`, e)
       return { success: false, message: `丢弃更改失败: ${e}` }
+    }
+  }
+
+  async getStatusBrief(repoPath: string): Promise<{ isRepo: boolean; changesCount: number; rootPath?: string }> {
+    try {
+      const git: SimpleGit = simpleGit(repoPath)
+      const isRepo = await git.checkIsRepo()
+      if (!isRepo) return { isRepo: false, changesCount: 0 }
+      const rootPath = await git.revparse(['--show-toplevel'])
+      const status = await git.status()
+      const count = (status.staged?.length || 0) +
+        (status.modified?.length || 0) +
+        (status.not_added?.length || 0) +
+        (status.created?.length || 0) +
+        (status.deleted?.length || 0) +
+        ((status.renamed || []).length || 0) +
+        (status.conflicted?.length || 0)
+      return { isRepo: true, changesCount: count, rootPath }
+    } catch (e) {
+      log.error(`Failed to get git status brief for ${repoPath}:`, e)
+      return { isRepo: false, changesCount: 0 }
+    }
+  }
+
+  async getRemote(repoPath: string): Promise<{ remote: string; remoteUrl: string }> {
+    try {
+      const git: SimpleGit = simpleGit(repoPath)
+      const remotes = await git.getRemotes(true)
+      if (remotes.length === 0) return { remote: '', remoteUrl: '' }
+      const origin = remotes.find(r => r.name === 'origin') || remotes[0]
+
+      // Try to get URL using remote command
+      let remoteUrl = origin.refs?.fetch || ''
+      if (!remoteUrl) {
+        try {
+          const url = await git.remote(['get-url', origin.name])
+          remoteUrl = (url || '').trim()
+        } catch {
+          remoteUrl = ''
+        }
+      }
+
+      return { remote: origin.name, remoteUrl }
+    } catch (e) {
+      log.error(`Failed to get remote for ${repoPath}:`, e)
+      return { remote: '', remoteUrl: '' }
+    }
+  }
+
+  async getLastCommit(repoPath: string): Promise<{ hash: string; date: string; message: string }> {
+    try {
+      const git: SimpleGit = simpleGit(repoPath)
+      const log = await git.log({ maxCount: 1 })
+      if (!log.all || log.all.length === 0) return { hash: '', date: '', message: '' }
+      const commit = log.all[0]
+      return {
+        hash: commit.hash,
+        date: commit.date,
+        message: commit.message
+      }
+    } catch (e) {
+      log.error(`Failed to get last commit for ${repoPath}:`, e)
+      return { hash: '', date: '', message: '' }
     }
   }
 }

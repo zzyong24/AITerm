@@ -39,7 +39,7 @@ export class FileService {
         return true
       })
 
-      // Get git repo root and status for untracked and modified file detection
+      // Get git repo root and status for untracked and modified file detection (scoped to target dir)
       let untrackedPaths = new Set()
       let modifiedPaths = new Set()
       try {
@@ -48,18 +48,20 @@ export class FileService {
           stdio: ['pipe', 'pipe', 'pipe']
         }).trim()
         if (gitDir) {
-          const untrackedOutput = execSync(`git -C "${gitDir}" ls-files --others --exclude-standard`, {
-            encoding: 'utf-8',
-            stdio: ['pipe', 'pipe', 'pipe']
-          })
+          const relDir = dirPath.startsWith(gitDir + '/') ? dirPath.slice(gitDir.length + 1) : '.'
+          const scopeArg = relDir && relDir !== '.' ? relDir : ''
+          const untrackedOutput = execSync(
+            `git -C "${gitDir}" ls-files --others --exclude-standard ${scopeArg ? '"' + scopeArg + '"' : ''}`,
+            { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
+          )
           untrackedOutput.trim().split('\n').filter(Boolean).forEach(f => {
             const absPath = join(gitDir, f)
             untrackedPaths.add(absPath)
           })
-          const modifiedOutput = execSync(`git -C "${gitDir}" diff --name-only`, {
-            encoding: 'utf-8',
-            stdio: ['pipe', 'pipe', 'pipe']
-          })
+          const modifiedOutput = execSync(
+            `git -C "${gitDir}" diff --name-only ${scopeArg ? '"' + scopeArg + '"' : ''}`,
+            { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
+          )
           modifiedOutput.trim().split('\n').filter(Boolean).forEach(f => {
             const absPath = join(gitDir, f)
             modifiedPaths.add(absPath)
@@ -81,6 +83,7 @@ export class FileService {
         try {
           isGitIgnored = this.isGitIgnored(fullPath)
         } catch {}
+        const hasGitDir = isDir && existsSync(join(fullPath, '.git'))
         results.push({
           name,
           path: fullPath,
@@ -88,6 +91,7 @@ export class FileService {
           isGitIgnored,
           isUntracked: untrackedPaths.has(fullPath),
           isModified: modifiedPaths.has(fullPath),
+          hasGitDir,
           size
         })
       }
@@ -411,13 +415,31 @@ export class FileService {
     return results
   }
 
-  async searchFileContent(dirPath, query, maxResults = 100) {
+  async searchFileContent(dirPath, query, maxResults = 100, extensions = null) {
     const results = []
 
     const isBinaryFile = (filename) => {
       const binaryExtensions = ['.exe', '.dll', '.so', '.dylib', '.bin', '.obj', '.o', '.a', '.lib', '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.pdf', '.zip', '.tar', '.gz', '.rar', '.7z']
       const ext = filename.toLowerCase()
       return binaryExtensions.some(e => ext.endsWith(e))
+    }
+
+    const matchesExtension = (filename) => {
+      if (!extensions || extensions === '*.*' || extensions.trim() === '') return true
+
+      // 逗号分隔的多个模式，如: *.ts,*.js,*.vue
+      const patterns = extensions.split(',').map(p => p.trim()).filter(p => p)
+      if (patterns.length === 0) return true
+
+      const extRegex = patterns.map(pattern => {
+        const regexStr = pattern
+          .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+          .replace(/\*/g, '[^/]*')
+          .replace(/\?/g, '.')
+        return new RegExp(regexStr, 'i')
+      })
+
+      return extRegex.some(regex => regex.test(filename))
     }
 
     const getSearchPreview = (lines, matchLine, query) => {
@@ -455,6 +477,7 @@ export class FileService {
               await searchRecursive(fullPath, depth + 1)
             } else {
               if (isBinaryFile(entry)) continue
+              if (!matchesExtension(entry)) continue
 
               const content = readFileSync(fullPath, 'utf-8')
               const lines = content.split('\n')

@@ -152,7 +152,13 @@ function registerIpcHandlers() {
 
   // 项目相关
   ipcMain.handle('get-projects', async () => {
-    return projectService.getProjects()
+    const projects = projectService.getProjects()
+    // 附加 git 摘要
+    const result = await Promise.all(projects.map(async (p: { id: string; name: string; path: string; group?: string }) => {
+      const brief = await gitService.getStatusBrief(p.path)
+      return { ...p, git: brief }
+    }))
+    return result
   })
 
   ipcMain.handle('add-project', async (_, name: string, path: string, group?: string) => {
@@ -276,9 +282,25 @@ function registerIpcHandlers() {
     return await fileService.searchFileContent(dirPath, query)
   })
 
+  ipcMain.handle('exec-command', async (_, command: string, cwd: string) => {
+    return fileService.execCommand(command, cwd)
+  })
+
   // Git 相关
   ipcMain.handle('get-git-status', async (_, path: string) => {
     return await gitService.getStatus(path)
+  })
+
+  ipcMain.handle('get-git-repo-brief', async (_, path: string) => {
+    return await gitService.getStatusBrief(path)
+  })
+
+  ipcMain.handle('get-git-remote', async (_, path: string) => {
+    return await gitService.getRemote(path)
+  })
+
+  ipcMain.handle('get-git-last-commit', async (_, path: string) => {
+    return await gitService.getLastCommit(path)
   })
 
   ipcMain.handle('git-stage-file', async (_, repoPath: string, filePath: string) => {
@@ -293,8 +315,8 @@ function registerIpcHandlers() {
     return await gitService.unstageFile(repoPath, filePath)
   })
 
-  ipcMain.handle('git-commit', async (_, repoPath: string, message: string) => {
-    return await gitService.commit(repoPath, message)
+  ipcMain.handle('git-commit', async (_, repoPath: string, message: string, files: string[] = []) => {
+    return await gitService.commit(repoPath, message, files)
   })
 
   ipcMain.handle('git-push', async (_, repoPath: string) => {

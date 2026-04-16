@@ -1,5 +1,5 @@
 <template>
-  <div class="directory-tree" @contextmenu.prevent="onContextMenu">
+  <div class="directory-tree">
     <a-spin v-if="loading && !treeData.length" size="small" class="tree-loading" />
     <a-tree
       v-if="treeData.length"
@@ -14,7 +14,18 @@
       @expand="onExpand"
     >
       <template #title="{ dataRef }">
-        <span class="tree-node-title" :class="{ 'git-ignored': dataRef.isGitIgnored }" :data-path="dataRef.path" @contextmenu="(e) => onNodeContextMenu(e, dataRef.path, dataRef.isDirectory)">{{ dataRef.title }}</span>
+        <span class="tree-node-title" :class="{ 'git-ignored': dataRef.isGitIgnored }" :data-path="dataRef.path" @contextmenu="(e) => onNodeContextMenu(e, dataRef.path, dataRef.isDirectory)">
+          {{ dataRef.title }}
+          <span v-if="dataRef.hasGitDir" class="tree-git-icon-wrapper">
+            <svg class="tree-git-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="18" cy="18" r="3" />
+              <circle cx="6" cy="6" r="3" />
+              <path d="M13 6h3a2 2 0 0 1 2 2v7" />
+              <path d="M6 9v12" />
+            </svg>
+            <span v-if="dataRef.gitRepo?.changesCount > 0" class="tree-git-badge">{{ dataRef.gitRepo.changesCount > 99 ? '99+' : dataRef.gitRepo.changesCount }}</span>
+          </span>
+        </span>
       </template>
     </a-tree>
 
@@ -31,6 +42,8 @@
       <div class="context-menu-item" v-if="!contextMenu.isDirectory" @click="handleEditFile">编辑</div>
       <div class="context-menu-item" @click="handleOpenInEditor">在编辑器中打开</div>
       <div class="context-menu-separator" />
+      <div class="context-menu-item" v-if="contextMenu.isDirectory" @click="handleOpenCommitDialog">版本管理</div>
+      <div class="context-menu-separator" v-if="contextMenu.isDirectory" />
       <div class="context-menu-item danger" @click="handleDelete">删除</div>
       <div class="context-menu-separator" />
       <div class="context-menu-item" @click="handleCopyPath">复制路径</div>
@@ -52,6 +65,24 @@
         </div>
       </div>
     </div>
+
+    <!-- 版本管理弹窗 -->
+    <GitCommitDialog
+      v-if="commitDialog.visible"
+      :file-list="commitDialog.files"
+      :loading="commitDialog.loading"
+      :branch="commitDialog.branch"
+      :remote="commitDialog.remote"
+      :ahead="commitDialog.ahead"
+      :behind="commitDialog.behind"
+      :last-commit="commitDialog.lastCommit"
+      :committing="commitDialog.committing"
+      :too-many-files-count="commitDialog.tooManyFilesCount"
+      @commit="handleCommitFiles"
+      @cancel="commitDialog.visible = false"
+      @pull="handleDialogPull"
+      @push="handleDialogPush"
+    />
   </div>
 </template>
 
@@ -62,10 +93,19 @@ import {
   readDirectoryBatch,
   readFile as apiReadFile,
   openProjectInEditor as apiOpenProjectInEditor,
-  deletePath as apiDeletePath
+  deletePath as apiDeletePath,
+  getGitRepoBrief,
+  getGitStatus as apiGetGitStatus,
+  getGitRemote,
+  getGitLastCommit,
+  gitStageFile as apiGitStageFile,
+  gitCommit as apiGitCommit,
+  gitPull as apiGitPull,
+  gitPush as apiGitPush
 } from '../api'
 import { appBusiness } from '../store/AppBusiness'
 import { alert } from '../plugins/MessageBox'
+import GitCommitDialog, { type CommitFile } from './GitCommitDialog.vue'
 
 interface TreeNode {
   title: string
@@ -73,6 +113,8 @@ interface TreeNode {
   path: string
   isDirectory: boolean
   isGitIgnored?: boolean
+  hasGitDir?: boolean
+  gitRepo?: { isRepo: boolean; changesCount: number }
   children?: TreeNode[]
   loading?: boolean
 }
@@ -81,7 +123,8 @@ export default defineComponent({
   name: 'DirectoryTree',
 
   components: {
-    'a-tree': Tree
+    'a-tree': Tree,
+    GitCommitDialog
   },
 
   props: {
@@ -108,7 +151,21 @@ export default defineComponent({
         isDirectory: false
       },
       showConfirm: false,
-      pathToDelete: ''
+      pathToDelete: '',
+      commitDialog: {
+        visible: false,
+        loading: false,
+        committing: false,
+        repoPath: '',
+        dirPath: '',
+        files: [] as CommitFile[],
+        branch: '',
+        remote: '',
+        ahead: 0,
+        behind: 0,
+        lastCommit: null as { hash: string; date: string; message: string } | null,
+        tooManyFilesCount: 0
+      }
     }
   },
 
@@ -129,6 +186,10 @@ export default defineComponent({
         const children = await this.readDirectory(this.rootPath)
         this.treeData = children
         this.expandedKeys = []
+        // 非阻塞刷新直接下级的 git 角标
+        if (children.length > 0) {
+          this.refreshChildrenGitStatus(children)
+        }
       } catch (e) {
         console.error('Failed to load tree:', e)
       } finally {
@@ -146,6 +207,7 @@ export default defineComponent({
           path: entry.path,
           isDirectory: entry.isDirectory,
           isGitIgnored: entry.isGitIgnored,
+          hasGitDir: entry.hasGitDir,
           children: entry.isDirectory ? [] : undefined,
           isLeaf: !entry.isDirectory
         }))
@@ -165,6 +227,43 @@ export default defineComponent({
     onExpand(expandedKeys: any, e: any) {
       this.expandedKeys = expandedKeys
       this.autoExpandParent = false
+
+      // 展开目录时刷新下级目录的 git 角标（非阻塞）
+      const expandedPath = e.node?.dataRef?.path
+      if (expandedPath) {
+        const node = this.findTreeNodeByPath(this.treeData, expandedPath)
+        if (node?.children?.length > 0) {
+          this.refreshChildrenGitStatus(node.children)
+        }
+      }
+    },
+
+async refreshChildrenGitStatus(children: TreeNode[]) {
+      const gitChildren = children.filter((c) => c.hasGitDir)
+      if (gitChildren.length === 0) return
+
+      await Promise.all(
+        gitChildren.map(async (child) => {
+          try {
+            const brief = await getGitRepoBrief(child.path)
+            child.gitRepo = brief.isRepo ? brief : undefined
+          } catch (e) {
+            child.gitRepo = undefined
+          }
+        })
+      )
+      this.treeData = [...this.treeData]
+    },
+
+    findTreeNodeByPath(tree: TreeNode[], path: string): TreeNode | null {
+      for (const node of tree) {
+        if (node.path === path) return node
+        if (node.children) {
+          const found = this.findTreeNodeByPath(node.children, path)
+          if (found) return found
+        }
+      }
+      return null
     },
 
     onLoadData(treeNode: any) {
@@ -177,6 +276,25 @@ export default defineComponent({
         const children = await this.readDirectory(treeNode.dataRef.path)
         treeNode.dataRef.children = children
         this.treeData = [...this.treeData]
+
+        // 延迟加载子目录的 git 状态（不阻塞展开）
+        const gitDirs = children.filter((c: TreeNode) => c.hasGitDir)
+        if (gitDirs.length > 0) {
+          Promise.all(
+            gitDirs.map(async (node: TreeNode) => {
+              try {
+                const brief = await getGitRepoBrief(node.path)
+                if (brief.isRepo) {
+                  node.gitRepo = brief
+                }
+              } catch (e) {
+                console.error('Failed to get git repo brief:', e)
+              }
+            })
+          ).then(() => {
+            this.treeData = [...this.treeData]
+          })
+        }
 
         resolve()
       })
@@ -294,6 +412,203 @@ export default defineComponent({
         alert(`复制失败: ${e}`)
       }
       this.closeContextMenu()
+    },
+
+    async handleOpenCommitDialog() {
+      const dirPath = this.contextMenu.path
+      this.closeContextMenu()
+
+      this.commitDialog.loading = true
+      this.commitDialog.visible = true
+      this.commitDialog.dirPath = dirPath
+      this.commitDialog.repoPath = ''
+      this.commitDialog.files = []
+      this.commitDialog.branch = ''
+      this.commitDialog.remote = ''
+      this.commitDialog.ahead = 0
+      this.commitDialog.behind = 0
+      this.commitDialog.lastCommit = null
+      this.commitDialog.tooManyFilesCount = 0
+
+      try {
+        const brief = await getGitRepoBrief(dirPath)
+        if (!brief.isRepo) {
+          alert('该目录不是 Git 仓库')
+          this.commitDialog.visible = false
+          return
+        }
+        const repoPath = brief.rootPath || dirPath
+        this.commitDialog.repoPath = repoPath
+
+        // 文件数量过多，跳过 status 接口，直接显示警告
+        if ((brief.changesCount || 0) > 2000) {
+          this.commitDialog.tooManyFilesCount = brief.changesCount
+          this.commitDialog.loading = false
+          return
+        }
+
+        const [status, remoteInfo, lastCommit] = await Promise.all([
+          apiGetGitStatus(dirPath),
+          getGitRemote(dirPath),
+          getGitLastCommit(dirPath)
+        ])
+
+        this.commitDialog.branch = status.branch || ''
+        this.commitDialog.ahead = status.ahead || 0
+        this.commitDialog.behind = status.behind || 0
+        this.commitDialog.remote = remoteInfo?.remoteUrl || remoteInfo?.remote || ''
+        this.commitDialog.lastCommit = lastCommit?.hash ? lastCommit : null
+
+        const files = this.buildCommitFiles(status, dirPath, repoPath)
+        this.commitDialog.files = files
+      } catch (e) {
+        alert(`加载 Git 状态失败: ${e}`)
+        this.commitDialog.visible = false
+      } finally {
+        this.commitDialog.loading = false
+      }
+    },
+
+    buildCommitFiles(status: any, dirPath: string, repoPath: string): CommitFile[] {
+      const files: CommitFile[] = []
+      const dirPrefix = dirPath.endsWith('/') ? dirPath : dirPath + '/'
+      const MAX_FILES = 500
+
+      const addIfUnderDir = (file: string, badge: string) => {
+        if (files.length >= MAX_FILES) return
+        const absPath = repoPath.endsWith('/') ? repoPath + file : repoPath + '/' + file
+        if (absPath.startsWith(dirPrefix) || absPath === dirPath) {
+          files.push({ path: file, name: file, badge })
+        }
+      }
+
+      status.modified?.forEach((f: string) => addIfUnderDir(f, 'M'))
+      status.untracked?.forEach((f: string) => addIfUnderDir(f, 'U'))
+      status.deleted?.forEach((f: string) => addIfUnderDir(f, 'D'))
+      status.created?.forEach((f: string) => addIfUnderDir(f, 'A'))
+      status.renamed?.forEach((f: string) => addIfUnderDir(f, 'R'))
+      status.conflicted?.forEach((f: string) => addIfUnderDir(f, 'C'))
+      status.staged?.forEach((f: string) => {
+        let badge = 'M'
+        if (status.deleted?.includes(f)) badge = 'D'
+        else if (status.created?.includes(f)) badge = 'A'
+        else if (status.renamed?.includes(f)) badge = 'R'
+        else if (status.conflicted?.includes(f)) badge = 'C'
+        addIfUnderDir(f, badge)
+      })
+
+      const seen = new Set<string>()
+      return files.filter(f => {
+        if (seen.has(f.path)) return false
+        seen.add(f.path)
+        return true
+      })
+    },
+
+    async handleCommitFiles({ files, message }: { files: string[]; message: string }) {
+      if (!this.commitDialog.repoPath || files.length === 0) return
+      this.commitDialog.committing = true
+      try {
+        const result = await apiGitCommit(this.commitDialog.repoPath, message, files)
+        if (result.success) {
+          alert('提交成功')
+          await this.refreshCommitDialog()
+        } else {
+          alert(result.message || '提交失败')
+        }
+      } catch (e) {
+        alert(`提交失败: ${e}`)
+      } finally {
+        this.commitDialog.committing = false
+      }
+    },
+
+    async handleDialogPull() {
+      if (!this.commitDialog.repoPath) return
+      this.commitDialog.committing = true
+      try {
+        const result = await apiGitPull(this.commitDialog.repoPath)
+        if (result.success) {
+          alert('拉取成功')
+          await this.refreshCommitDialog()
+        } else {
+          alert(result.message || '拉取失败')
+        }
+      } catch (e) {
+        alert(`拉取失败: ${e}`)
+      } finally {
+        this.commitDialog.committing = false
+      }
+    },
+
+    async handleDialogPush() {
+      if (!this.commitDialog.repoPath) return
+      this.commitDialog.committing = true
+      try {
+        const result = await apiGitPush(this.commitDialog.repoPath)
+        if (result.success) {
+          alert('推送成功')
+          await this.refreshCommitDialog()
+        } else {
+          alert(result.message || '推送失败')
+        }
+      } catch (e) {
+        alert(`推送失败: ${e}`)
+      } finally {
+        this.commitDialog.committing = false
+      }
+    },
+
+    async refreshCommitDialog() {
+      try {
+        this.commitDialog.loading = true
+        const repoPath = this.commitDialog.repoPath
+        const dirPath = this.commitDialog.dirPath
+
+        // 先获取 brief，判断文件数量是否仍然过多
+        const brief = await getGitRepoBrief(dirPath)
+        if (brief.isRepo && (brief.changesCount || 0) > 2000) {
+          this.commitDialog.tooManyFilesCount = brief.changesCount
+          this.commitDialog.files = []
+          this.commitDialog.loading = false
+          // 更新目录树 git 角标
+          const node = this.findTreeNodeByPath(this.treeData, dirPath)
+          if (node && node.hasGitDir) {
+            node.gitRepo = brief
+            this.treeData = [...this.treeData]
+          }
+          return
+        }
+
+        const [status, remoteInfo, lastCommit] = await Promise.all([
+          apiGetGitStatus(repoPath),
+          getGitRemote(repoPath),
+          getGitLastCommit(repoPath)
+        ])
+
+        this.commitDialog.tooManyFilesCount = 0
+        this.commitDialog.branch = status.branch
+        this.commitDialog.ahead = status.ahead
+        this.commitDialog.behind = status.behind
+        this.commitDialog.remote = remoteInfo.remoteUrl || remoteInfo.remote
+        this.commitDialog.lastCommit = lastCommit.hash ? lastCommit : null
+
+        const files = this.buildCommitFiles(status, dirPath, repoPath)
+        this.commitDialog.files = files
+
+        // 更新目录树 git 角标
+        const node = this.findTreeNodeByPath(this.treeData, dirPath)
+        if (node && node.hasGitDir) {
+          if (brief.isRepo) {
+            node.gitRepo = brief
+            this.treeData = [...this.treeData]
+          }
+        }
+      } catch (e) {
+        console.error('刷新弹窗失败:', e)
+      } finally {
+        this.commitDialog.loading = false
+      }
     }
   }
 })
@@ -318,6 +633,34 @@ export default defineComponent({
 
 .tree-node-title.git-ignored {
   opacity: 0.5;
+}
+
+.tree-git-icon-wrapper {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.tree-git-icon {
+  color: #858585;
+}
+
+.tree-git-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  margin-left: 2px;
+  background: #5a8c5a;
+  color: #fff;
+  border-radius: 7px;
+  font-size: 9px;
+  font-weight: bold;
+  flex-shrink: 0;
 }
 
 /* 自定义 tree 样式 */

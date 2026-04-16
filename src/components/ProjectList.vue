@@ -15,14 +15,6 @@
             <path d="M21 21l-4.35-4.35" />
           </svg>
         </button>
-        <button class="panel-tab" :class="{ active: activeTab === 'git' }" @click="activeTab = 'git'" title="源代码管理">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="18" cy="18" r="3" />
-            <circle cx="6" cy="6" r="3" />
-            <path d="M13 6h3a2 2 0 0 1 2 2v7" />
-            <path d="M6 9v12" />
-          </svg>
-        </button>
         <div class="panel-tabs-spacer"></div>
         <button class="btn-settings" @click="handleToggleSettings" title="设置">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -59,7 +51,7 @@
                       <span class="expand-toggle">{{ expandedId === project.id ? '▼' : '▶' }}</span>
                       {{ project.name }}
                     </span>
-                    <span v-if="getGitStatus(project.path)" class="git-icon-wrapper">
+                    <span v-if="project.git?.isRepo" class="git-icon-wrapper">
                       <svg class="git-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                         stroke-width="2">
                         <circle cx="18" cy="18" r="3" />
@@ -67,8 +59,8 @@
                         <path d="M13 6h3a2 2 0 0 1 2 2v7" />
                         <path d="M6 9v12" />
                       </svg>
-                      <span v-if="getGitChangesCount(project.path) > 0" class="git-badge-small">
-                        {{ getGitChangesCount(project.path) }}
+                      <span v-if="(project.git?.changesCount || 0) > 0" class="git-badge-small">
+                        {{ project.git?.changesCount }}
                       </span>
                     </span>
                   </div>
@@ -88,24 +80,24 @@
       <div v-show="activeTab === 'search'" class="panel-content">
         <div class="search-header">
           <span class="search-title">搜索</span>
-          <button class="btn-search-options" @click="showSearchOptions = !showSearchOptions" title="搜索选项">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="1"></circle>
-              <circle cx="19" cy="12" r="1"></circle>
-              <circle cx="5" cy="12" r="1"></circle>
-            </svg>
-          </button>
         </div>
         <div class="search-input-container">
           <div class="search-row">
-            <input v-model="searchQuery" type="text" class="search-input" placeholder="搜索文件内容..."
-              @keydown.enter="handleSearch" />
-            <button class="btn-search" @click="handleSearch" title="搜索">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="8" />
-                <path d="M21 21l-4.35-4.35" />
-              </svg>
-            </button>
+            <input v-model="searchQuery" type="text" class="search-input" placeholder="搜索文件内容..." ref="searchInputRef"
+              @keydown.enter="handleSearch" @keydown.up.prevent="navigateHistory(-1)"
+              @keydown.down.prevent="navigateHistory(1)" @keydown.escape="hideHistoryDropdown"
+              @focus="showHistoryDropdown = true" @input="handleSearchInput" />
+          </div>
+          <!-- 历史搜索下拉 -->
+          <div v-if="showHistoryDropdown && searchHistory.length > 0" class="search-history-dropdown">
+            <div v-for="(item, idx) in filteredHistory" :key="idx" class="search-history-item"
+              :class="{ selected: idx === selectedHistoryIndex }" @click="selectHistoryItem(item)">
+              {{ item }}
+            </div>
+          </div>
+          <div class="search-row">
+            <input v-model="searchExtensions" type="text" class="search-extensions-input"
+              placeholder="扩展名: *.ts,*.js,*.vue 或留空搜索全部" />
           </div>
           <div class="search-row">
             <span class="search-label">目录:</span>
@@ -119,7 +111,7 @@
               </div>
             </div>
           </div>
-          <div v-if="showSearchOptions" class="search-options">
+          <div class="search-options">
             <label class="search-option">
               <input type="checkbox" v-model="searchOptions.caseSensitive" />
               区分大小写
@@ -127,6 +119,10 @@
             <label class="search-option">
               <input type="checkbox" v-model="searchOptions.wholeWord" />
               全字匹配
+            </label>
+            <label class="search-option">
+              <input type="checkbox" v-model="searchOptions.regex" />
+              正则
             </label>
             <label class="search-option">
               <input type="checkbox" v-model="searchOptions.regex" />
@@ -141,7 +137,10 @@
           <div v-else-if="searchQuery && searchResults.length === 0" class="search-empty">
             未找到匹配结果
           </div>
-          <div v-for="(results, file) in groupedResults" :key="file" class="search-file-group">
+          <div v-if="hasMoreSearchResults" class="search-warning">
+            结果过多，仅显示前 50 个文件。请使用更具体的搜索词缩小范围。
+          </div>
+          <div v-for="{ file, results } in limitedGroupedResults" :key="file" class="search-file-group">
             <div class="search-file-header" @click="toggleFileExpand(file)">
               <span class="expand-icon">{{ expandedFiles.includes(file) ? '▼' : '▶' }}</span>
               <span class="search-result-file">{{ file }}</span>
@@ -151,83 +150,10 @@
               <div v-for="(result, idx) in results" :key="idx" class="search-match-item"
                 @click="handleSearchResultClick(result)">
                 <span class="match-line">{{ result.line }}</span>
-                <span class="match-preview">{{ getMatchPreview(result) }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Git 面板 -->
-      <div v-show="activeTab === 'git'" class="panel-content">
-        <div class="git-header">
-          <span class="git-title">源代码管理</span>
-        </div>
-        <div class="git-projects">
-          <div v-if="gitProjects.length === 0" class="git-empty">
-            没有 Git 项目
-          </div>
-          <div v-for="project in gitProjects" :key="project.id" class="git-project-item"
-            @contextmenu.prevent="showContextMenu($event, project, 'git')">
-            <div class="git-project-info">
-              <span class="git-branch">{{ project.gitStatus?.branch || 'master' }}</span>
-              <span class="git-project-name">{{ project.name }}</span>
-              <span class="git-refresh" @click.stop="loadGitStatus(project)" title="刷新">↻</span>
-            </div>
-            <div v-if="project.gitStatus" class="git-changes">
-              <div v-if="project.gitStatus.modified?.length" class="git-section">
-                <div class="git-section-header" @click.stop="toggleGitSection(project.id, 'modified')">
-                  <span class="git-section-title">
-                    <span class="git-section-arrow">{{ expandedGitSections[project.id + '_modified'] ? '▼' : '▶' }}</span>
-                    <span class="git-change modified">{{ project.gitStatus.modified.length }} 个文件已修改</span>
-                  </span>
-                </div>
-                <div v-if="expandedGitSections[project.id + '_modified']" class="git-file-list">
-                  <div v-for="file in project.gitStatus.modified.slice(0, 100)" :key="file" class="git-file-item" :title="file"
-                    @click.stop="openGitFile(project, file)"
-                    @contextmenu.prevent.stop="(e) => showGitFileContextMenu(e, project, file, 'modified')">
-                    {{ file }}
-                  </div>
-                  <div v-if="project.gitStatus.modified.length > 100" class="git-file-more">
-                    还有 {{ project.gitStatus.modified.length - 100 }} 个文件未显示
-                  </div>
-                </div>
-              </div>
-              <div v-if="project.gitStatus.untracked?.length" class="git-section">
-                <div class="git-section-header" @click.stop="toggleGitSection(project.id, 'untracked')">
-                  <span class="git-section-title">
-                    <span class="git-section-arrow">{{ expandedGitSections[project.id + '_untracked'] ? '▼' : '▶' }}</span>
-                    <span class="git-change untracked">{{ project.gitStatus.untracked.length }} 个未跟踪文件</span>
-                  </span>
-                </div>
-                <div v-if="expandedGitSections[project.id + '_untracked']" class="git-file-list">
-                  <div v-for="file in project.gitStatus.untracked.slice(0, 100)" :key="file" class="git-file-item" :title="file"
-                    @click.stop="openGitFile(project, file)"
-                    @contextmenu.prevent.stop="(e) => showGitFileContextMenu(e, project, file, 'untracked')">
-                    {{ file }}
-                  </div>
-                  <div v-if="project.gitStatus.untracked.length > 100" class="git-file-more">
-                    还有 {{ project.gitStatus.untracked.length - 100 }} 个文件未显示
-                  </div>
-                </div>
-              </div>
-              <div v-if="project.gitStatus.staged?.length" class="git-section">
-                <div class="git-section-header" @click.stop="toggleGitSection(project.id, 'staged')">
-                  <span class="git-section-title">
-                    <span class="git-section-arrow">{{ expandedGitSections[project.id + '_staged'] ? '▼' : '▶' }}</span>
-                    <span class="git-change staged">{{ project.gitStatus.staged.length }} 个文件已暂存</span>
-                  </span>
-                </div>
-                <div v-if="expandedGitSections[project.id + '_staged']" class="git-file-list">
-                  <div v-for="file in project.gitStatus.staged.slice(0, 100)" :key="file" class="git-file-item" :title="file"
-                    @click.stop="openGitFile(project, file)"
-                    @contextmenu.prevent.stop="(e) => showGitFileContextMenu(e, project, file, 'staged')">
-                    {{ file }}
-                  </div>
-                  <div v-if="project.gitStatus.staged.length > 100" class="git-file-more">
-                    还有 {{ project.gitStatus.staged.length - 100 }} 个文件未显示
-                  </div>
-                </div>
+                <span class="match-preview" @mouseenter="showPreviewTooltip($event, result)"
+                  @mouseleave="hidePreviewTooltip">
+                  {{ getMatchPreview(result) }}
+                </span>
               </div>
             </div>
           </div>
@@ -245,6 +171,8 @@
           <div class="context-menu-item" v-if="hasTerminalsToRestore" @click="handleRestoreTerminals">恢复终端</div>
           <div class="context-menu-separator" />
           <div class="context-menu-item" @click="handleSearchInDirectory">在目录中搜索</div>
+          <div class="context-menu-separator" />
+          <div class="context-menu-item" @click="handleOpenProjectCommitDialog">版本管理</div>
           <div class="context-menu-separator" />
           <div class="context-menu-item" @click="handleOpenInEditor">编辑器打开</div>
           <div class="context-menu-item" @click="startRename">重命名</div>
@@ -270,41 +198,18 @@
           <div class="context-menu-separator" />
           <div class="context-menu-item danger" @click="handleDeleteDirectory">删除</div>
         </template>
-        <template v-else-if="contextMenu.type === 'git'">
-          <div class="context-menu-item" @click="handleGitStageAll">暂存所有更改</div>
-          <div class="context-menu-item" @click="handleGitCommit">提交...</div>
-          <div class="context-menu-separator" />
-          <div class="context-menu-item" @click="handleGitPush">推送到远程</div>
-          <div class="context-menu-item" @click="handleGitPull">从远程拉取</div>
-          <div class="context-menu-separator" />
-          <div class="context-menu-item" @click="handleRefreshGitStatus">刷新状态</div>
-        </template>
-        <template v-else-if="contextMenu.type === 'gitfile'">
-          <div class="context-menu-item" @click="handleEditFile">编辑</div>
-          <div class="context-menu-item" @click="handleOpenFile">打开</div>
-          <div class="context-menu-separator" />
-          <template v-if="contextMenu.gitFileType === 'untracked'">
-            <div class="context-menu-item" @click="handleGitStageFile">加入跟踪</div>
-            <div class="context-menu-separator" />
-          </template>
-          <template v-if="contextMenu.gitFileType === 'staged'">
-            <div class="context-menu-item" @click="handleGitUnstageFile">取消暂存</div>
-            <div class="context-menu-separator" />
-          </template>
-          <template v-if="contextMenu.gitFileType === 'modified'">
-            <div class="context-menu-item" @click="handleGitDiscardChanges">丢弃更改</div>
-            <div class="context-menu-separator" />
-          </template>
-          <div class="context-menu-item" @click="handleCopyPath">复制路径</div>
-          <div class="context-menu-separator" />
-          <div class="context-menu-item danger" @click="handleDeleteFile">删除</div>
-        </template>
       </div>
 
       <!-- 浮动路径提示 -->
       <div v-if="hoveredProject" class="path-tooltip"
         :style="{ left: hoveredProject.x + 'px', top: hoveredProject.y + 'px' }">
         {{ hoveredProject.path }}
+      </div>
+
+      <!-- 浮动 preview 提示 -->
+      <div v-if="hoveredPreview" class="preview-tooltip"
+        :style="{ left: hoveredPreview.x + 'px', top: hoveredPreview.y + 'px' }">
+        {{ hoveredPreview.content }}
       </div>
     </template>
 
@@ -334,6 +239,13 @@
         </div>
       </div>
     </div>
+
+    <!-- 版本管理弹窗 -->
+    <GitCommitDialog v-if="commitDialog.visible" :file-list="commitDialog.files" :loading="commitDialog.loading"
+      :branch="commitDialog.branch" :remote="commitDialog.remote" :ahead="commitDialog.ahead"
+      :behind="commitDialog.behind" :last-commit="commitDialog.lastCommit" :committing="commitDialog.committing"
+      :too-many-files-count="commitDialog.tooManyFilesCount" @commit="handleCommitFiles"
+      @cancel="commitDialog.visible = false" @pull="handleDialogPull" @push="handleDialogPush" />
   </div>
 </template>
 
@@ -344,6 +256,9 @@ import { eventBus } from '../utils/EventBus'
 import {
   pickDirectory as apiPickDirectory,
   getGitStatus as apiGetGitStatus,
+  getGitRepoBrief as apiGetGitRepoBrief,
+  getGitRemote as apiGetGitRemote,
+  getGitLastCommit as apiGetGitLastCommit,
   readFile as apiReadFile,
   searchInDirectory as apiSearchInDirectory,
   searchFileContent as apiSearchFileContent,
@@ -362,19 +277,15 @@ import {
 import { alert, confirm, prompt } from '../plugins/MessageBox'
 import DirectoryTree from './DirectoryTree.vue'
 import ActivityPanel from './ActivityPanel.vue'
+import GitCommitDialog, { type CommitFile } from './GitCommitDialog.vue'
 
 interface ContextMenuState {
   visible: boolean
   x: number
   y: number
   project: Project | null
-  type: 'project' | 'file' | 'directory' | 'git' | 'gitfile'
+  type: 'project' | 'file' | 'directory'
   path: string
-  gitFileType?: 'modified' | 'untracked' | 'staged'
-}
-
-interface GitStatusMap {
-  [key: string]: GitStatus | null
 }
 
 export default defineComponent({
@@ -382,7 +293,8 @@ export default defineComponent({
 
   components: {
     DirectoryTree,
-    ActivityPanel
+    ActivityPanel,
+    GitCommitDialog
   },
 
   props: {
@@ -416,21 +328,40 @@ export default defineComponent({
       } as ContextMenuState,
       expandedId: null as string | null,
       hoveredProject: null as { path: string; x: number; y: number } | null,
+      hoveredPreview: null as { content: string; x: number; y: number } | null,
       hasTerminalsToRestore: false,
-      gitStatusMap: {} as GitStatusMap,
-      activeTab: 'explorer' as 'explorer' | 'search' | 'git',
+      activeTab: 'explorer' as 'explorer' | 'search',
       searchQuery: '',
       searchResults: [] as { file: string; path: string; line: number; preview: string }[],
       searchPath: '',
+      searchExtensions: '',
       showSearchOptions: false,
       showPathPicker: false,
       searching: false,
       expandedFiles: [] as string[],
-      expandedGitSections: {} as Record<string, boolean>,
       searchOptions: {
         caseSensitive: false,
         wholeWord: false,
         regex: false
+      },
+      searchHistory: [] as string[],
+      selectedHistoryIndex: -1,
+      showHistoryDropdown: false,
+      // 版本管理弹窗
+      commitDialog: {
+        visible: false,
+        loading: false,
+        committing: false,
+        repoPath: '',
+        dirPath: '',
+        files: [] as CommitFile[],
+        project: null as Project | null,
+        branch: '',
+        remote: '',
+        ahead: 0,
+        behind: 0,
+        lastCommit: null as { hash: string; date: string; message: string } | null,
+        tooManyFilesCount: 0
       }
     }
   },
@@ -449,25 +380,13 @@ export default defineComponent({
       }, {})
     },
 
-    gitProjects(): (Project & { gitStatus: GitStatus | null })[] {
-      return this.projects
-        .filter(p => p && this.gitStatusMap[p.id]?.isRepo)
-        .map(p => ({
-          ...p,
-          gitStatus: this.gitStatusMap[p.id] || null
-        }))
-    },
-
-    totalGitChanges(): number {
-      let total = 0
-      for (const project of this.gitProjects) {
-        if (project.gitStatus) {
-          total += (project.gitStatus.modified?.length || 0)
-          total += (project.gitStatus.untracked?.length || 0)
-          total += (project.gitStatus.staged?.length || 0)
-        }
+    filteredHistory(): string[] {
+      if (!this.searchQuery) {
+        // 搜索框为空时，显示所有历史记录
+        return this.searchHistory.slice(0, 10)
       }
-      return total
+      const query = this.searchQuery.toLowerCase()
+      return this.searchHistory.filter(h => h.toLowerCase().includes(query)).slice(0, 5)
     },
 
     groupedResults(): Record<string, { file: string; path: string; line: number; preview: string }[]> {
@@ -476,9 +395,25 @@ export default defineComponent({
         if (!grouped[result.file]) {
           grouped[result.file] = []
         }
-        grouped[result.file].push(result)
+        // 每个文件最多只显示10个结果
+        if (grouped[result.file].length < 10) {
+          grouped[result.file].push(result)
+        }
       }
       return grouped
+    },
+
+    limitedGroupedResults(): { file: string; results: { file: string; path: string; line: number; preview: string }[] }[] {
+      const entries = Object.entries(this.groupedResults)
+      const maxFiles = 50 // 最多显示50个文件
+      if (entries.length <= maxFiles) {
+        return entries.map(([file, results]) => ({ file, results }))
+      }
+      return entries.slice(0, maxFiles).map(([file, results]) => ({ file, results }))
+    },
+
+    hasMoreSearchResults(): boolean {
+      return Object.keys(this.groupedResults).length > 50
     }
   },
 
@@ -494,18 +429,16 @@ export default defineComponent({
     this.sessions = [...appBusiness.sessions]
     this.activeProjectId = appBusiness.activeProjectId
 
-    // 加载 Git 状态
-    this.projects.forEach((p) => {
-      if (p.id && !this.gitStatusMap[p.id]) {
-        this.loadGitStatus(p)
-      }
-    })
-
     window.addEventListener('click', this.closeContextMenu)
+    window.addEventListener('click', this.handleOutsideClick)
+
+    // 加载保存的搜索历史
+    this.loadSearchHistory()
   },
 
   beforeUnmount() {
     window.removeEventListener('click', this.closeContextMenu)
+    window.removeEventListener('click', this.handleOutsideClick)
     eventBus.off(AppEvents.PROJECTS_CHANGE, this.handleProjectsChange)
     eventBus.off(AppEvents.SESSIONS_CHANGE, this.handleSessionsChange)
     eventBus.off(AppEvents.ACTIVE_PROJECT_CHANGE, this.handleActiveProjectChange)
@@ -516,12 +449,6 @@ export default defineComponent({
     // 事件处理
     handleProjectsChange(projects: Project[]) {
       this.projects = [...projects]
-      // 加载新项目的 Git 状态
-      projects.forEach((p) => {
-        if (p.id && !this.gitStatusMap[p.id]) {
-          this.loadGitStatus(p)
-        }
-      })
     },
     handleSessionsChange(sessions: any[]) {
       this.sessions = [...sessions]
@@ -532,53 +459,10 @@ export default defineComponent({
 
     handleInitialized(data: { projects: Project[]; homeDir: string; editorPath: string }) {
       this.projects = [...data.projects]
-      // 加载 Git 状态
-      data.projects.forEach((p) => {
-        if (p.id && !this.gitStatusMap[p.id]) {
-          this.loadGitStatus(p)
-        }
-      })
     },
 
     handleToggleSettings() {
       appBusiness.toggleSettings()
-    },
-
-    toggleGitSection(projectId: string, type: string) {
-      const key = projectId + '_' + type
-      this.expandedGitSections[key] = !this.expandedGitSections[key]
-    },
-
-    openGitFile(project: Project & { gitStatus: GitStatus | null }, file: string) {
-      const filePath = project.path.endsWith('/') ? `${project.path}${file}` : `${project.path}/${file}`
-      const projectId = project.id || null
-      const projectName = project.name || null
-
-      this.$emit('switch-project', projectId)
-
-      apiReadFile(filePath).then(content => {
-        this.$emit('open-editor', {
-          projectId,
-          projectName,
-          path: filePath,
-          content
-        })
-      }).catch(e => {
-        alert(`读取文件失败: ${e}`)
-      })
-    },
-
-    showGitFileContextMenu(e: MouseEvent, project: Project & { gitStatus: GitStatus | null }, file: string, gitFileType: 'modified' | 'untracked' | 'staged') {
-      const filePath = project.path.endsWith('/') ? `${project.path}${file}` : `${project.path}/${file}`
-      this.contextMenu = {
-        visible: true,
-        x: e.clientX,
-        y: e.clientY,
-        project,
-        type: 'gitfile',
-        path: filePath,
-        gitFileType
-      }
     },
 
     isProjectActive(projectId: string): boolean {
@@ -632,123 +516,198 @@ export default defineComponent({
       this.closeContextMenu()
     },
 
-    async handleGitStageAll() {
+    async handleOpenProjectCommitDialog() {
       if (!this.contextMenu.project) return
-      try {
-        const result = await apiGitStageAll(this.contextMenu.project.path)
-        if (result.success) {
-          await this.loadGitStatus(this.contextMenu.project)
-          alert('已暂存所有更改')
-        } else {
-          alert(result.message || '暂存失败')
-        }
-      } catch (e) {
-        alert(`暂存失败: ${e}`)
-      }
       this.closeContextMenu()
+
+      const dirPath = this.contextMenu.project.path
+      this.commitDialog.loading = true
+      this.commitDialog.visible = true
+      this.commitDialog.dirPath = dirPath
+      this.commitDialog.repoPath = ''
+      this.commitDialog.files = []
+      this.commitDialog.project = this.contextMenu.project
+      this.commitDialog.branch = ''
+      this.commitDialog.remote = ''
+      this.commitDialog.ahead = 0
+      this.commitDialog.behind = 0
+      this.commitDialog.lastCommit = null
+      this.commitDialog.tooManyFilesCount = 0
+
+      try {
+        const brief = await apiGetGitRepoBrief(dirPath)
+        if (!brief.isRepo) {
+          alert('该目录不是 Git 仓库')
+          this.commitDialog.visible = false
+          return
+        }
+        const repoPath = brief.rootPath || dirPath
+        this.commitDialog.repoPath = repoPath
+
+        // 文件数量过多，跳过 status 接口，直接显示警告
+        if ((brief.changesCount || 0) > 2000) {
+          this.commitDialog.tooManyFilesCount = brief.changesCount
+          this.commitDialog.loading = false
+          return
+        }
+
+        const [status, remoteInfo, lastCommit] = await Promise.all([
+          apiGetGitStatus(repoPath),
+          apiGetGitRemote(repoPath),
+          apiGetGitLastCommit(repoPath)
+        ])
+
+        this.commitDialog.branch = status.branch
+        this.commitDialog.ahead = status.ahead
+        this.commitDialog.behind = status.behind
+        this.commitDialog.remote = remoteInfo.remoteUrl || remoteInfo.remote
+        this.commitDialog.lastCommit = lastCommit.hash ? lastCommit : null
+
+        const files = this.buildCommitFiles(status, dirPath, repoPath)
+        this.commitDialog.files = files
+      } catch (e) {
+        alert(`加载 Git 状态失败: ${e}`)
+        this.commitDialog.visible = false
+      } finally {
+        this.commitDialog.loading = false
+      }
     },
 
-    async handleGitStageFile() {
-      if (!this.contextMenu.project) return
-      try {
-        const result = await apiGitStageFile(this.contextMenu.project.path, this.contextMenu.path)
-        if (result.success) {
-          await this.loadGitStatus(this.contextMenu.project)
-        } else {
-          alert(result.message || '暂存失败')
+    buildCommitFiles(status: GitStatus, dirPath: string, repoPath: string): CommitFile[] {
+      const files: CommitFile[] = []
+      const dirPrefix = dirPath.endsWith('/') ? dirPath : dirPath + '/'
+
+      const addIfUnderDir = (file: string, badge: string) => {
+        const absPath = repoPath.endsWith('/') ? repoPath + file : repoPath + '/' + file
+        if (absPath.startsWith(dirPrefix) || absPath === dirPath) {
+          files.push({ path: file, name: file, badge })
         }
-      } catch (e) {
-        alert(`暂存失败: ${e}`)
       }
-      this.closeContextMenu()
+
+      status.modified?.forEach(f => addIfUnderDir(f, 'M'))
+      status.untracked?.forEach(f => addIfUnderDir(f, 'U'))
+      status.deleted?.forEach(f => addIfUnderDir(f, 'D'))
+      status.created?.forEach(f => addIfUnderDir(f, 'A'))
+      status.renamed?.forEach(f => addIfUnderDir(f, 'R'))
+      status.conflicted?.forEach(f => addIfUnderDir(f, 'C'))
+      status.staged?.forEach(f => {
+        let badge = 'M'
+        if (status.deleted?.includes(f)) badge = 'D'
+        else if (status.created?.includes(f)) badge = 'A'
+        else if (status.renamed?.includes(f)) badge = 'R'
+        else if (status.conflicted?.includes(f)) badge = 'C'
+        addIfUnderDir(f, badge)
+      })
+
+      const seen = new Set<string>()
+      return files.filter(f => {
+        if (seen.has(f.path)) return false
+        seen.add(f.path)
+        return true
+      })
     },
 
-    async handleGitUnstageFile() {
-      if (!this.contextMenu.project) return
+    async handleCommitFiles({ files, message }: { files: string[]; message: string }) {
+      if (!this.commitDialog.repoPath || files.length === 0) return
+      this.commitDialog.committing = true
       try {
-        const result = await apiGitUnstageFile(this.contextMenu.project.path, this.contextMenu.path)
+        const result = await apiGitCommit(this.commitDialog.repoPath, message, files)
         if (result.success) {
-          await this.loadGitStatus(this.contextMenu.project)
-        } else {
-          alert(result.message || '取消暂存失败')
-        }
-      } catch (e) {
-        alert(`取消暂存失败: ${e}`)
-      }
-      this.closeContextMenu()
-    },
-
-    async handleGitDiscardChanges() {
-      if (!this.contextMenu.project) return
-      const confirmed = await confirm(`确定要丢弃文件 "${this.contextMenu.path}" 的更改吗？此操作不可撤销。`)
-      if (!confirmed) return
-      try {
-        const result = await apiGitDiscardChanges(this.contextMenu.project.path, this.contextMenu.path)
-        if (result.success) {
-          await this.loadGitStatus(this.contextMenu.project)
-        } else {
-          alert(result.message || '丢弃更改失败')
-        }
-      } catch (e) {
-        alert(`丢弃更改失败: ${e}`)
-      }
-      this.closeContextMenu()
-    },
-
-    async handleGitCommit() {
-      if (!this.contextMenu.project) return
-      const message = await prompt('请输入提交信息:')
-      if (!message) return
-      try {
-        const result = await apiGitCommit(this.contextMenu.project.path, message)
-        if (result.success) {
-          await this.loadGitStatus(this.contextMenu.project)
           alert('提交成功')
+          await this.refreshCommitDialog()
         } else {
           alert(result.message || '提交失败')
         }
       } catch (e) {
         alert(`提交失败: ${e}`)
+      } finally {
+        this.commitDialog.committing = false
       }
-      this.closeContextMenu()
     },
 
-    async handleGitPush() {
-      if (!this.contextMenu.project) return
+    async handleDialogPull() {
+      if (!this.commitDialog.repoPath) return
+      this.commitDialog.committing = true
       try {
-        const result = await apiGitPush(this.contextMenu.project.path)
+        const result = await apiGitPull(this.commitDialog.repoPath)
         if (result.success) {
-          await this.loadGitStatus(this.contextMenu.project)
-          alert('推送成功')
-        } else {
-          alert(result.message || '推送失败')
-        }
-      } catch (e) {
-        alert(`推送失败: ${e}`)
-      }
-      this.closeContextMenu()
-    },
-
-    async handleGitPull() {
-      if (!this.contextMenu.project) return
-      try {
-        const result = await apiGitPull(this.contextMenu.project.path)
-        if (result.success) {
-          await this.loadGitStatus(this.contextMenu.project)
           alert('拉取成功')
+          await this.refreshCommitDialog()
         } else {
           alert(result.message || '拉取失败')
         }
       } catch (e) {
         alert(`拉取失败: ${e}`)
+      } finally {
+        this.commitDialog.committing = false
       }
-      this.closeContextMenu()
     },
 
-    async handleRefreshGitStatus() {
-      if (!this.contextMenu.project) return
-      await this.loadGitStatus(this.contextMenu.project)
-      this.closeContextMenu()
+    async handleDialogPush() {
+      if (!this.commitDialog.repoPath) return
+      this.commitDialog.committing = true
+      try {
+        const result = await apiGitPush(this.commitDialog.repoPath)
+        if (result.success) {
+          alert('推送成功')
+          await this.refreshCommitDialog()
+        } else {
+          alert(result.message || '推送失败')
+        }
+      } catch (e) {
+        alert(`推送失败: ${e}`)
+      } finally {
+        this.commitDialog.committing = false
+      }
+    },
+
+    async refreshCommitDialog() {
+      try {
+        this.commitDialog.loading = true
+        const repoPath = this.commitDialog.repoPath
+        const dirPath = this.commitDialog.dirPath
+
+        // 先获取 brief，判断文件数量是否仍然过多
+        const brief = await apiGetGitRepoBrief(dirPath)
+        if (brief.isRepo && (brief.changesCount || 0) > 2000) {
+          this.commitDialog.tooManyFilesCount = brief.changesCount
+          this.commitDialog.files = []
+          this.commitDialog.loading = false
+          // 更新项目 git 角标（不阻塞）
+          if (this.commitDialog.project) {
+            this.commitDialog.project.git = brief
+          }
+          return
+        }
+
+        const [status, remoteInfo, lastCommit] = await Promise.all([
+          apiGetGitStatus(repoPath),
+          apiGetGitRemote(repoPath),
+          apiGetGitLastCommit(repoPath)
+        ])
+
+        this.commitDialog.tooManyFilesCount = 0
+        this.commitDialog.branch = status.branch
+        this.commitDialog.ahead = status.ahead
+        this.commitDialog.behind = status.behind
+        this.commitDialog.remote = remoteInfo.remoteUrl || remoteInfo.remote
+        this.commitDialog.lastCommit = lastCommit.hash ? lastCommit : null
+
+        const files = this.buildCommitFiles(status, dirPath, repoPath)
+        this.commitDialog.files = files
+        this.commitDialog.commitMessage = ''
+
+        // 更新项目 git 角标（不阻塞）
+        if (this.commitDialog.project) {
+          apiGetGitRepoBrief(repoPath).then((brief) => {
+            this.commitDialog.project.git = brief
+          }).catch(() => { })
+        }
+      } catch (e) {
+        console.error('刷新弹窗失败:', e)
+      } finally {
+        this.commitDialog.loading = false
+      }
     },
 
     async handleOpenInEditor() {
@@ -799,7 +758,7 @@ export default defineComponent({
       }
     },
 
-    async showContextMenu(e: MouseEvent, project: Project | null, type: 'project' | 'file' | 'directory' | 'git' | 'gitfile' = 'project', path: string = '') {
+    async showContextMenu(e: MouseEvent, project: Project | null, type: 'project' | 'file' | 'directory' = 'project', path: string = '') {
       this.contextMenu = {
         visible: true,
         x: e.clientX,
@@ -839,6 +798,43 @@ export default defineComponent({
       this.contextMenu.visible = false
     },
 
+    showPreviewTooltip(e: MouseEvent, result: { file: string; path: string; line: number; preview?: string }) {
+      if (result.preview) {
+        const rect = (e.target as HTMLElement).getBoundingClientRect()
+        this.hoveredPreview = {
+          content: result.preview,
+          x: rect.left,
+          y: rect.bottom + 5
+        }
+
+        // 调整位置避免超出屏幕
+        this.$nextTick(() => {
+          const tooltip = document.querySelector('.preview-tooltip') as HTMLElement
+          if (tooltip) {
+            const tooltipRect = tooltip.getBoundingClientRect()
+            if (tooltipRect.right > window.innerWidth) {
+              this.hoveredPreview!.x = window.innerWidth - tooltipRect.width - 10
+            }
+            if (tooltipRect.bottom > window.innerHeight) {
+              this.hoveredPreview!.y = rect.top - tooltipRect.height - 5
+            }
+          }
+        })
+      }
+    },
+
+    hidePreviewTooltip() {
+      this.hoveredPreview = null
+    },
+
+    handleOutsideClick(e: MouseEvent) {
+      // 检查点击是否在搜索区域外
+      const searchPanel = this.$el.querySelector('.search-input-container')
+      if (searchPanel && !searchPanel.contains(e.target as Node)) {
+        this.hideHistoryDropdown()
+      }
+    },
+
     showPathTooltip(e: MouseEvent, project: Project) {
       // if (project.id !== '__home__') {
       //   const rect = (e.target as HTMLElement).getBoundingClientRect()
@@ -854,39 +850,79 @@ export default defineComponent({
       this.hoveredProject = null
     },
 
-async loadGitStatus(project: Project) {
-    try {
-        const status = await apiGetGitStatus(project.path)
-        // 使用展开运算符触发 Vue 3 响应式更新
-        this.gitStatusMap = { ...this.gitStatusMap, [project.id]: status }
-      } catch (e) {
-        console.error('Failed to load git status:', e)
-      }
-    },
-
-    getGitStatus(path: string): GitStatus | null {
-      const project = this.projects.find((p) => p.path === path)
-      if (project) {
-        return this.gitStatusMap[project.id] || null
-      }
-      return null
-    },
-
-    getGitChangesCount(path: string): number {
-      const status = this.getGitStatus(path)
-      if (!status) return 0
-      const count = (status.modified?.length || 0) + (status.untracked?.length || 0) + (status.staged?.length || 0)
-      return Math.min(count, 99)
-    },
-
     handleTreeNodeClick(path: string) {
       console.log('Node clicked:', path)
     },
 
+    handleSearchInput() {
+      // 只在用户手动输入时重置索引，导航时不重置
+      this.selectedHistoryIndex = -1
+      this.showHistoryDropdown = true
+    },
+
+    hideHistoryDropdown() {
+      this.showHistoryDropdown = false
+      this.selectedHistoryIndex = -1
+    },
+
+    navigateHistory(direction: number) {
+      const filtered = this.filteredHistory
+      if (filtered.length === 0) return
+
+      if (this.selectedHistoryIndex === -1) {
+        this.selectedHistoryIndex = direction > 0 ? 0 : filtered.length - 1
+      } else {
+        this.selectedHistoryIndex += direction
+        if (this.selectedHistoryIndex < 0) this.selectedHistoryIndex = filtered.length - 1
+        if (this.selectedHistoryIndex >= filtered.length) this.selectedHistoryIndex = 0
+      }
+
+      // 更新搜索框内容，但不触发输入事件
+      this.searchQuery = filtered[this.selectedHistoryIndex]
+    },
+
+    selectHistoryItem(item: string) {
+      this.searchQuery = item
+      this.selectedHistoryIndex = -1
+      this.showHistoryDropdown = false
+      this.handleSearch()
+    },
+
+    // 搜索历史持久化方法
+    loadSearchHistory() {
+      try {
+        const saved = localStorage.getItem('searchHistory')
+        if (saved) {
+          this.searchHistory = JSON.parse(saved)
+        }
+      } catch (e) {
+        console.error('Failed to load search history:', e)
+      }
+    },
+
+    saveSearchHistory() {
+      try {
+        localStorage.setItem('searchHistory', JSON.stringify(this.searchHistory))
+      } catch (e) {
+        console.error('Failed to save search history:', e)
+      }
+    },
+
     handleSearch() {
-      if (!this.searchQuery.trim()) {
+      const query = this.searchQuery.trim()
+      if (!query) {
         this.searchResults = []
         return
+      }
+
+      // 保存到历史记录
+      if (!this.searchHistory.includes(query)) {
+        this.searchHistory.unshift(query)
+        if (this.searchHistory.length > 10) {
+          this.searchHistory.pop()
+        }
+        // 持久化到 localStorage
+        this.saveSearchHistory()
       }
 
       // 确定搜索路径
@@ -903,15 +939,17 @@ async loadGitStatus(project: Project) {
         return
       }
 
+      // 解析扩展名（正则表达式）
+      const extensions = this.searchExtensions.trim() || '*.*'
+
       this.searching = true
       this.expandedFiles = []
 
-      // 执行文件内容搜索
-      apiSearchFileContent(searchPath, this.searchQuery)
+      // 执行文件内容搜索，限制返回结果数量避免界面卡顿
+      apiSearchFileContent(searchPath, query, 200, extensions)
         .then(results => {
           this.searchResults = results.map(r => ({
-            ...r,
-            preview: ''
+            ...r
           }))
           this.searching = false
           // 默认展开前5个文件
@@ -936,14 +974,52 @@ async loadGitStatus(project: Project) {
             projectId,
             projectName,
             path: result.path,
-            content
+            content,
+            line: result.line
           })
         })
       }
     },
 
     getMatchPreview(result: { file: string; path: string; line: number; preview?: string }): string {
-      return result.preview || `第 ${result.line} 行`
+      if (!result.preview) {
+        return `第 ${result.line} 行`
+      }
+
+      let preview = result.preview.trim()
+      const query = this.searchQuery.trim()
+
+      if (preview.length <= 60) {
+        return preview
+      }
+
+      // 如果有搜索查询，尝试围绕查询进行裁剪，突出显示重点
+      if (query) {
+        const lowerPreview = preview.toLowerCase()
+        const lowerQuery = query.toLowerCase()
+        const queryIndex = lowerPreview.indexOf(lowerQuery)
+
+        if (queryIndex !== -1) {
+          // 计算裁剪的起始位置，让查询内容尽量居中
+          const contextLength = 25 // 查询前后各保留多少字符
+          let start = Math.max(0, queryIndex - contextLength)
+          let end = Math.min(preview.length, queryIndex + query.length + contextLength)
+
+          let cropped = ''
+          if (start > 0) {
+            cropped += '...'
+          }
+          cropped += preview.substring(start, end)
+          if (end < preview.length) {
+            cropped += '...'
+          }
+
+          return cropped
+        }
+      }
+
+      // 默认裁剪方式：取前面部分
+      return preview.substring(0, 60) + '...'
     },
 
     selectSearchPath(path: string) {
@@ -962,8 +1038,13 @@ async loadGitStatus(project: Project) {
 
     handleSearchInDirectory(path?: string) {
       // 可以从 DirectoryTree 传入特定路径
+      // 防止 event 对象被当作路径传入
+      if (typeof path === 'object' && path !== null && 'clientX' in path) {
+        path = undefined
+      }
       const searchPath = path || this.contextMenu.path || this.contextMenu.project?.path
-      if (searchPath) {
+      // 确保 searchPath 是有效的字符串路径
+      if (searchPath && typeof searchPath === 'string' && searchPath.length > 0 && !searchPath.startsWith('[object')) {
         this.activeTab = 'search'
         this.searchPath = searchPath
         this.searchQuery = ''
@@ -1045,10 +1126,6 @@ async loadGitStatus(project: Project) {
       if (confirmed) {
         try {
           await apiDeletePath(this.contextMenu.path)
-          // 刷新 git 状态
-          if (this.contextMenu.project) {
-            await this.loadGitStatus(this.contextMenu.project)
-          }
         } catch (e) {
           alert(`删除失败: ${e}`)
         }
@@ -1171,8 +1248,7 @@ async loadGitStatus(project: Project) {
   text-transform: uppercase;
 }
 
-.search-header,
-.git-header {
+.search-header {
   height: 36px;
   padding: 0 12px;
   display: flex;
@@ -1180,8 +1256,7 @@ async loadGitStatus(project: Project) {
   border-bottom: 1px solid #3e3e42;
 }
 
-.search-title,
-.git-title {
+.search-title {
   font-size: 11px;
   font-weight: 600;
   color: #d4d4d4;
@@ -1230,6 +1305,50 @@ async loadGitStatus(project: Project) {
 .search-input:focus {
   outline: none;
   border-color: #007acc;
+}
+
+.search-extensions-input {
+  flex: 1;
+  padding: 4px 8px;
+  background: #3c3c3c;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  color: #d4d4d4;
+  font-size: 12px;
+}
+
+.search-extensions-input:focus {
+  outline: none;
+  border-color: #007acc;
+}
+
+.search-history-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 40px;
+  background: #252526;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  margin-top: 2px;
+  z-index: 100;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.search-history-item {
+  padding: 6px 12px;
+  font-size: 13px;
+  color: #d4d4d4;
+  cursor: pointer;
+}
+
+.search-history-item:hover {
+  background: #094771;
+}
+
+.search-history-item.selected {
+  background: #094771;
 }
 
 .btn-search {
@@ -1331,12 +1450,21 @@ async loadGitStatus(project: Project) {
   padding: 0 8px;
 }
 
-.search-empty,
-.git-empty {
+.search-empty {
   padding: 12px;
   color: #858585;
   font-size: 13px;
   text-align: center;
+}
+
+.search-warning {
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  background: #5a1d1d;
+  border: 1px solid #c42b1c;
+  border-radius: 4px;
+  color: #f48771;
+  font-size: 12px;
 }
 
 .search-file-group {
@@ -1428,134 +1556,6 @@ async loadGitStatus(project: Project) {
   color: #858585;
   font-size: 11px;
   margin-top: 2px;
-}
-
-.git-projects {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px 0;
-}
-
-.git-project-item {
-  padding: 8px 12px;
-  cursor: pointer;
-  border-bottom: 1px solid #2d2d2d;
-}
-
-.git-project-item:hover {
-  background: #2a2d2e;
-}
-
-.git-project-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.git-branch {
-  padding: 2px 6px;
-  background: #3c6e3c;
-  color: #fff;
-  border-radius: 4px;
-  font-size: 11px;
-  flex-shrink: 0;
-}
-
-.git-project-name {
-  color: #d4d4d4;
-  font-size: 13px;
-  flex: 1;
-  min-width: 0;
-}
-
-.git-refresh {
-  margin-left: auto;
-  flex-shrink: 0;
-}
-
-.git-changes {
-  margin-top: 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.git-section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  cursor: pointer;
-  padding: 2px 0;
-}
-
-.git-section-header:hover {
-  opacity: 0.8;
-}
-
-.git-section-title {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.git-section-arrow {
-  font-size: 10px;
-  color: #858585;
-  width: 12px;
-  text-align: center;
-}
-
-.git-refresh {
-  font-size: 12px;
-  color: #858585;
-  cursor: pointer;
-  padding: 0 4px;
-}
-
-.git-refresh:hover {
-  color: #d4d4d4;
-}
-
-.git-change {
-  font-size: 11px;
-  color: #858585;
-}
-
-.git-change.modified {
-  color: #f48771;
-}
-
-.git-change.untracked {
-  color: #8b6914;
-}
-
-.git-change.staged {
-  color: #4ec9b0;
-}
-
-.git-file-list {
-  padding-left: 16px;
-  margin-top: 6px;
-}
-
-.git-file-item {
-  font-size: 11px;
-  color: #d4d4d4;
-  padding: 3px 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.git-file-item:hover {
-  color: #fff;
-}
-
-.git-file-more {
-  font-size: 11px;
-  color: #858585;
-  padding: 2px 0;
-  font-style: italic;
 }
 
 .btn-collapse,
@@ -1685,23 +1685,6 @@ async loadGitStatus(project: Project) {
   justify-content: center;
 }
 
-.git-indicator {
-  margin-left: 8px;
-  padding: 1px 6px;
-  border-radius: 3px;
-  font-size: 10px;
-  background: #3c6e3c;
-  color: #fff;
-}
-
-.git-indicator.modified {
-  background: #8b6914;
-}
-
-.git-indicator .git-modified {
-  color: #f48771;
-}
-
 .edit-name-input {
   width: 100%;
   padding: 2px 4px;
@@ -1759,6 +1742,23 @@ async loadGitStatus(project: Project) {
   z-index: 99999;
   max-width: 400px;
   word-break: break-all;
+}
+
+.preview-tooltip {
+  position: fixed;
+  background: #ffffff;
+  color: #333333;
+  padding: 10px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  z-index: 99999;
+  max-width: 600px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.4;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border: 1px solid #d4d4d4;
 }
 
 .modal-overlay {

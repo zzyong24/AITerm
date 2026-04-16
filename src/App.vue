@@ -136,8 +136,8 @@ export default defineComponent({
       await appBusiness.launchTerminal(project.id, project.name, project.path)
     },
 
-    handleOpenEditor({ projectId, projectName, path, content }: { projectId: string | null; projectName: string | null; path: string; content: string }) {
-      appBusiness.openEditor(projectId, projectName, path, content)
+    handleOpenEditor({ projectId, projectName, path, content, line }: { projectId: string | null; projectName: string | null; path: string; content: string; line?: number }) {
+      appBusiness.openEditor(projectId, projectName, path, content, line)
     },
 
     handleSwitchProject(projectId: string) {

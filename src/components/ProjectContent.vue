@@ -261,6 +261,8 @@ export default defineComponent({
   flex: 1;
   position: relative;
   overflow: hidden;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .content-container > * {
@@ -274,6 +276,7 @@ export default defineComponent({
 .content-container > .inactive {
   opacity: 0;
   pointer-events: none;
+  user-select: none;
 }
 
 .no-items {

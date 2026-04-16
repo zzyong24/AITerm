@@ -34,7 +34,7 @@ export class FileService {
     }
   }
 
-  async readDirectoryBatch(dirPath: string, showHidden: boolean): Promise<{ name: string; path: string; isDirectory: boolean; isGitIgnored: boolean; isUntracked: boolean; isModified: boolean }[]> {
+  async readDirectoryBatch(dirPath: string, showHidden: boolean): Promise<{ name: string; path: string; isDirectory: boolean; isGitIgnored: boolean; isUntracked: boolean; isModified: boolean; hasGitDir: boolean }[]> {
     try {
       const entries = readdirSync(dirPath)
       const filtered = entries.filter((name) => {
@@ -88,13 +88,15 @@ export class FileService {
         try {
           isGitIgnored = this.isGitIgnored(fullPath)
         } catch {}
+        const hasGitDir = isDir && existsSync(join(fullPath, '.git'))
         results.push({
           name,
           path: fullPath,
           isDirectory: isDir,
           isGitIgnored,
           isUntracked: untrackedPaths.has(fullPath),
-          isModified: modifiedPaths.has(fullPath)
+          isModified: modifiedPaths.has(fullPath),
+          hasGitDir
         })
       }
 

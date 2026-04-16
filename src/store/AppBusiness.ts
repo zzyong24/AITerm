@@ -23,6 +23,10 @@ export interface Project {
   name: string
   path: string
   group?: string
+  git?: {
+    isRepo: boolean
+    changesCount: number
+  }
 }
 
 export interface ChildTerminal {
@@ -49,6 +53,8 @@ export interface EditorTab {
   name: string
   content: string
   modified: boolean
+  scrollToLine?: number
+  scrollTrigger?: number
 }
 
 // Tab项（终端或编辑器）
@@ -437,7 +443,7 @@ class AppBusinessClass {
   }
 
   // ============ 编辑器 ============
-  openEditor(projectId: string | null, projectName: string | null, path: string, content: string = ''): string {
+  openEditor(projectId: string | null, projectName: string | null, path: string, content: string = '', scrollToLine?: number): string {
     if (!projectId) {
       console.error('编辑器必须归属于项目')
       return ''
@@ -454,6 +460,10 @@ class AppBusinessClass {
       this.activeProjectId = projectId
       this.notifyActiveProjectChange(projectId)
       this.notifyTabsChange()
+      // 如果需要滚动到指定行，更新编辑器状态
+      if (scrollToLine) {
+        this.updateEditorScrollToLine(existing.id, scrollToLine)
+      }
       return existing.id
     }
 
@@ -466,7 +476,8 @@ class AppBusinessClass {
       path,
       name: path.split('/').pop() || path,
       content,
-      modified: false
+      modified: false,
+      scrollToLine
     })
     this.activeEditorId = id
     this.notifyEditorsChange()
@@ -532,6 +543,20 @@ class AppBusinessClass {
     if (editor) {
       editor.modified = false
       this.notifyEditorsChange()
+    }
+  }
+
+  updateEditorScrollToLine(editorId: string, line: number | undefined) {
+    console.log('[AppBusiness] updateEditorScrollToLine called', { editorId, line })
+    const editor = this.editors.find(e => e.id === editorId)
+    if (editor) {
+      editor.scrollToLine = line
+      // 添加 trigger 来强制触发更新
+      editor.scrollTrigger = Date.now()
+      console.log('[AppBusiness] Updating editor', { editorId, scrollToLine: editor.scrollToLine, scrollTrigger: editor.scrollTrigger })
+      this.notifyEditorsChange()
+    } else {
+      console.log('[AppBusiness] Editor not found', editorId)
     }
   }
 

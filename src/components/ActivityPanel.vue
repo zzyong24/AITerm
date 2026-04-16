@@ -6,7 +6,10 @@
       :key="session.id"
       class="activity-row"
     >
-      <div class="activity-name">{{ session.projectName || '终端' }}</div>
+      <div class="activity-header">
+        <div class="activity-name">{{ session.projectName || '终端' }}</div>
+        <div class="activity-last">{{ getActivityLast(session.id) }}</div>
+      </div>
       <div class="activity-bar-container">
         <div class="activity-bar-bg">
           <div
@@ -103,6 +106,18 @@ export default defineComponent({
       if (age > 5000) return 0
 
       return act.bytes
+    },
+
+    getActivityLast(sessionId: string): string {
+      const act = this.activityData[sessionId]
+      if (!act) return ''
+
+      const age = Math.floor((Date.now() - act.last) / 1000)
+      if (age < 0) return ''
+      if (age < 60) return `${age}秒前`
+      if (age < 3600) return `${Math.floor(age / 60)}分钟前`
+      if (age < 86400) return `${Math.floor(age / 3600)}小时前`
+      return `${Math.floor(age / 86400)}天前`
     }
   }
 })
@@ -125,10 +140,21 @@ export default defineComponent({
   margin-bottom: 6px;
 }
 
+.activity-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
 .activity-name {
   font-size: 12px;
   color: #d4d4d4;
-  margin-bottom: 2px;
+}
+
+.activity-last {
+  font-size: 10px;
+  color: #858585;
 }
 
 .activity-bar-container {

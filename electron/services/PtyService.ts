@@ -156,9 +156,11 @@ export class PtyService extends EventEmitter {
     if (session) {
       try {
         // 先杀灭整个进程树，防止子进程（如 dev server）残留
-        if ((session.pty as any).exitCode === null) {
-          this.killProcessTree(session.pty.pid)
-          session.pty.kill()
+        this.killProcessTree(session.pty.pid)
+        try {
+          session.pty.kill('SIGKILL')
+        } catch (e) {
+          // ignore
         }
         log.info(`Closed session ${sessionId}`)
       } catch (e) {
@@ -172,9 +174,11 @@ export class PtyService extends EventEmitter {
   closeAll(): void {
     for (const [sessionId, session] of this.sessions) {
       try {
-        if ((session.pty as any).exitCode === null) {
-          this.killProcessTree(session.pty.pid)
-          session.pty.kill()
+        this.killProcessTree(session.pty.pid)
+        try {
+          session.pty.kill('SIGKILL')
+        } catch (e) {
+          // ignore
         }
         log.info(`Closed session ${sessionId}`)
       } catch (e) {
