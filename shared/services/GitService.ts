@@ -182,7 +182,7 @@ export class GitService {
     }
   }
 
-  async getStatusBrief(repoPath: string): Promise<{ isRepo: boolean; changesCount: number; rootPath?: string }> {
+  async getStatusBrief(repoPath: string): Promise<{ isRepo: boolean; changesCount: number; rootPath?: string; ahead?: number; behind?: number }> {
     try {
       const git: SimpleGit = simpleGit(repoPath, { timeout: { block: 2000 } })
       const isRepo = await git.checkIsRepo()
@@ -191,7 +191,9 @@ export class GitService {
       // 使用更轻量的 git status --short
       const statusOutput = await git.raw(['status', '--short', '--untracked-files=all'])
       const count = statusOutput.trim() ? statusOutput.trim().split('\n').length : 0
-      return { isRepo: true, changesCount: count, rootPath }
+      // 获取 ahead/behind 信息
+      const status = await git.status()
+      return { isRepo: true, changesCount: count, rootPath, ahead: status.ahead, behind: status.behind }
     } catch (e) {
       this.log(`Failed to get git status brief for ${repoPath}: ${e}`)
       return { isRepo: false, changesCount: 0 }

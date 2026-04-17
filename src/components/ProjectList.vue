@@ -62,6 +62,8 @@
                       <span v-if="(project.git?.changesCount || 0) > 0" class="git-badge-small">
                         {{ project.git?.changesCount }}
                       </span>
+                      <span v-if="(project.git?.ahead || 0) > 0" class="git-ahead" title="本地领先远程">↑{{ project.git.ahead }}</span>
+                      <span v-if="(project.git?.behind || 0) > 0" class="git-behind" title="本地落后远程">↓{{ project.git.behind }}</span>
                     </span>
                   </div>
                 </template>
@@ -1726,6 +1728,20 @@ export default defineComponent({
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.git-ahead {
+  color: #2e7d32;
+  font-size: 10px;
+  font-weight: bold;
+  margin-left: 4px;
+}
+
+.git-behind {
+  color: #c42b1c;
+  font-size: 10px;
+  font-weight: bold;
+  margin-left: 2px;
 }
 
 .edit-name-input {

@@ -9,6 +9,8 @@ export interface Project {
   git?: {
     isRepo: boolean
     changesCount: number
+    ahead?: number
+    behind?: number
   }
 }
 
@@ -223,7 +225,7 @@ export const getGitStatus = (path: string) =>
   apiCall<GitStatus>('/git-status?path=' + encodeURIComponent(path))
 
 export const getGitRepoBrief = (path: string) =>
-  apiCall<{ isRepo: boolean; changesCount: number; rootPath?: string }>('/git-repo-brief?path=' + encodeURIComponent(path))
+  apiCall<{ isRepo: boolean; changesCount: number; rootPath?: string; ahead?: number; behind?: number }>('/git-repo-brief?path=' + encodeURIComponent(path))
 
 export const getGitRemote = (path: string) =>
   apiCall<{ remote: string; remoteUrl: string }>('/git-remote?path=' + encodeURIComponent(path))

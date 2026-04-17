@@ -160,7 +160,7 @@ export const getGitStatus = (path: string) =>
   window.electronAPI.invoke<GitStatus>('get-git-status', path)
 
 export const getGitRepoBrief = (path: string) =>
-  window.electronAPI.invoke<{ isRepo: boolean; changesCount: number; rootPath?: string }>('get-git-repo-brief', path)
+  window.electronAPI.invoke<{ isRepo: boolean; changesCount: number; rootPath?: string; ahead?: number; behind?: number }>('get-git-repo-brief', path)
 
 export const getGitRemote = (path: string) =>
   window.electronAPI.invoke<{ remote: string; remoteUrl: string }>('get-git-remote', path)

@@ -18,6 +18,8 @@
             </svg>
             <span v-if="dataRef.gitRepo?.changesCount > 0" class="tree-git-badge">{{ dataRef.gitRepo.changesCount > 99 ?
               '99+' : dataRef.gitRepo.changesCount }}</span>
+            <span v-if="(dataRef.gitRepo?.ahead || 0) > 0" class="tree-git-ahead" title="本地领先远程">↑{{ dataRef.gitRepo.ahead }}</span>
+            <span v-if="(dataRef.gitRepo?.behind || 0) > 0" class="tree-git-behind" title="本地落后远程">↓{{ dataRef.gitRepo.behind }}</span>
           </span>
         </span>
       </template>
@@ -95,7 +97,7 @@ interface TreeNode {
   isDirectory: boolean
   isGitIgnored?: boolean
   hasGitDir?: boolean
-  gitRepo?: { isRepo: boolean; changesCount: number }
+  gitRepo?: { isRepo: boolean; changesCount: number; ahead?: number; behind?: number }
   children?: TreeNode[]
   loading?: boolean
 }
@@ -647,6 +649,20 @@ export default defineComponent({
   font-size: 9px;
   font-weight: bold;
   flex-shrink: 0;
+}
+
+.tree-git-ahead {
+  color: #2e7d32;
+  font-size: 9px;
+  font-weight: bold;
+  margin-left: 2px;
+}
+
+.tree-git-behind {
+  color: #c42b1c;
+  font-size: 9px;
+  font-weight: bold;
+  margin-left: 1px;
 }
 
 /* 自定义 tree 样式 */

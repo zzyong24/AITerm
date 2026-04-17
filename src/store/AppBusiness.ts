@@ -26,6 +26,8 @@ export interface Project {
   git?: {
     isRepo: boolean
     changesCount: number
+    ahead?: number
+    behind?: number
   }
 }
 
