@@ -22,12 +22,15 @@ async function loadServices() {
   const { PtyService } = await import('./services/PtyService')
   const { ProjectService } = await import('./services/ProjectService')
   const { FileService } = await import('./services/FileService')
-  const { GitService } = await import('./services/GitService')
+  const { GitService } = await import('../shared/services/GitService')
 
   ptyService = new PtyService()
   projectService = new ProjectService()
   fileService = new FileService()
   gitService = new GitService()
+
+  // 设置 GitService 日志处理器
+  gitService.setLogger((msg: string) => log.info(msg))
 
   // 终端事件转发到渲染进程
   ptyService.on('output', (data: any) => {

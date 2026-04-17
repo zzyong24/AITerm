@@ -147,7 +147,7 @@ export default defineComponent({
     }
   },
 
-  emits: ['commit', 'cancel', 'pull', 'push'],
+  emits: ['commit', 'commit-all', 'cancel', 'pull', 'push'],
 
   data() {
     return {
@@ -160,6 +160,9 @@ export default defineComponent({
   computed: {
     canCommit(): boolean {
       return this.selectedFiles.length > 0 && this.commitMessage.trim().length > 0
+    },
+    canCommitAll(): boolean {
+      return this.commitMessage.trim().length > 0
     },
     isAllSelected(): boolean {
       return this.fileList.length > 0 && this.selectedFiles.length === this.fileList.length
@@ -215,6 +218,12 @@ export default defineComponent({
     handleCommit() {
       this.$emit('commit', {
         files: this.selectedFiles,
+        message: this.commitMessage.trim()
+      })
+    },
+
+    handleCommitAll() {
+      this.$emit('commit-all', {
         message: this.commitMessage.trim()
       })
     },
@@ -628,6 +637,17 @@ export default defineComponent({
 .btn-action:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.btn-commit-all {
+  background: #4caf50;
+  border-color: #4caf50;
+  color: #fff;
+}
+
+.btn-commit-all:hover:not(:disabled) {
+  background: #43a047;
+  border-color: #43a047;
 }
 
 .btn-confirm,

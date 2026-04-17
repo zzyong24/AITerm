@@ -24,6 +24,17 @@
 
     <!-- 编辑器容器 -->
     <div ref="editorContainer" class="editor-container"></div>
+
+    <!-- 底部状态栏 -->
+    <div class="editor-statusbar">
+      <div class="file-path" @click="copyPath" :title="'点击复制: ' + currentEditor.path">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+        </svg>
+        <span>{{ currentEditor.path }}</span>
+      </div>
+    </div>
   </div>
   <div v-else class="no-editor">
     没有打开的文件
@@ -311,6 +322,17 @@ export default defineComponent({
       if (this.editorView) {
         openSearchPanel(this.editorView as any)
       }
+    },
+
+    async copyPath() {
+      if (this.currentEditor?.path) {
+        try {
+          await navigator.clipboard.writeText(this.currentEditor.path)
+          alert('路径已复制')
+        } catch (e) {
+          console.error('Failed to copy path:', e)
+        }
+      }
     }
   }
 })
@@ -485,5 +507,43 @@ export default defineComponent({
 .editor-container :deep(.cm-panel.cm-search label) {
   color: #666666;
   font-size: 12px;
+}
+
+.editor-statusbar {
+  display: flex;
+  align-items: center;
+  padding: 4px 12px;
+  background: #f3f3f3;
+  border-top: 1px solid #d4d4d4;
+  min-height: 28px;
+}
+
+.file-path {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #666666;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.15s;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.file-path:hover {
+  background: #e0e0e0;
+  color: #333333;
+}
+
+.file-path svg {
+  flex-shrink: 0;
+}
+
+.file-path span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

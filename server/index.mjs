@@ -3,7 +3,8 @@ import cors from 'cors'
 import { PtyService } from './services/PtyService.mjs'
 import { ProjectService } from './services/ProjectService.mjs'
 import { FileService } from './services/FileService.mjs'
-import { GitService } from './services/GitService.mjs'
+// 使用统一的 shared GitService（编译后从 dist-electron/shared 导入）
+import { GitService } from '../dist-electron/shared/services/GitService.js'
 
 const app = express()
 const PORT = 5001

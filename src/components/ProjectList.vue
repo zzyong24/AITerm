@@ -246,7 +246,7 @@
       :branch="commitDialog.branch" :remote="commitDialog.remote" :ahead="commitDialog.ahead"
       :behind="commitDialog.behind" :last-commit="commitDialog.lastCommit" :committing="commitDialog.committing"
       :too-many-files-count="commitDialog.tooManyFilesCount" @commit="handleCommitFiles"
-      @cancel="commitDialog.visible = false" @pull="handleDialogPull" @push="handleDialogPush" />
+      @commit-all="handleCommitAll" @cancel="commitDialog.visible = false" @pull="handleDialogPull" @push="handleDialogPush" />
   </div>
 </template>
 
@@ -613,6 +613,31 @@ export default defineComponent({
       this.commitDialog.committing = true
       try {
         const result = await apiGitCommit(this.commitDialog.repoPath, message, files)
+        if (result.success) {
+          alert('提交成功')
+          await this.refreshCommitDialog()
+        } else {
+          alert(result.message || '提交失败')
+        }
+      } catch (e) {
+        alert(`提交失败: ${e}`)
+      } finally {
+        this.commitDialog.committing = false
+      }
+    },
+
+    async handleCommitAll({ message }: { message: string }) {
+      if (!this.commitDialog.repoPath) return
+      this.commitDialog.committing = true
+      try {
+        // 先执行 git add .
+        const stageResult = await apiGitStageAll(this.commitDialog.repoPath)
+        if (!stageResult.success) {
+          alert(stageResult.message || '暂存失败')
+          return
+        }
+        // 再执行 git commit -m
+        const result = await apiGitCommit(this.commitDialog.repoPath, message, [])
         if (result.success) {
           alert('提交成功')
           await this.refreshCommitDialog()
