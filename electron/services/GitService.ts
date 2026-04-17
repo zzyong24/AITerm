@@ -122,14 +122,19 @@ export class GitService {
         await git.add(absPath)
       }
       const result = await git.commit(message)
-      if (!result.commit || result.summary.changes === 0) {
+      // 只提取可序列化的基本数据，避免返回包含不可序列化属性的对象
+      const commitHash = typeof result.commit === 'string' ? result.commit : String(result.commit || '')
+      const changesCount = typeof result.summary?.changes === 'number' ? result.summary.changes : 0
+
+      if (!commitHash || changesCount === 0) {
         return { success: false, message: '没有要提交的更改，请先暂存文件' }
       }
       log.info(`Committed with message: ${message}`)
       return { success: true, message: `已提交: ${message}` }
-    } catch (e) {
+    } catch (e: any) {
       log.error(`Failed to commit:`, e)
-      return { success: false, message: `提交失败: ${e}` }
+      const errorMessage = e?.message || String(e || '未知错误')
+      return { success: false, message: `提交失败: ${errorMessage}` }
     }
   }
 

@@ -255,3 +255,6 @@ export const windowIsMaximized = () => window.electronAPI.invoke<boolean>('windo
 export const windowSetFullscreen = (flag: boolean) => window.electronAPI.invoke('window-set-fullscreen', flag)
 export const windowIsFullscreen = () => window.electronAPI.invoke<boolean>('window-is-fullscreen')
 export const windowToggleFullscreen = () => window.electronAPI.invoke('window-toggle-fullscreen')
+
+// 查询打开的终端数量
+export const getOpenTerminalsCount = () => window.electronAPI.invoke<number>('get-open-terminals-count')

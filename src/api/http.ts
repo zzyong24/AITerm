@@ -293,6 +293,7 @@ export const windowIsMaximized = () => Promise.resolve(false)
 export const windowSetFullscreen = (_flag: boolean) => Promise.resolve()
 export const windowIsFullscreen = () => Promise.resolve(false)
 export const windowToggleFullscreen = () => Promise.resolve()
+export const getOpenTerminalsCount = () => Promise.resolve(0)
 
 // 终端历史 (浏览器模式下使用HTTP API)
 export interface HistoryEntry {

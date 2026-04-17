@@ -65,6 +65,7 @@ export const windowIsMaximized = api.windowIsMaximized
 export const windowSetFullscreen = api.windowSetFullscreen
 export const windowIsFullscreen = api.windowIsFullscreen
 export const windowToggleFullscreen = api.windowToggleFullscreen
+export const getOpenTerminalsCount = api.getOpenTerminalsCount
 
 // 终端历史
 export const saveTerminalHistory = api.saveTerminalHistory

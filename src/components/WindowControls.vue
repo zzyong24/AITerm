@@ -58,12 +58,33 @@
         </div>
       </div>
     </div>
+
+    <!-- 关闭确认对话框 -->
+    <div v-if="showCloseConfirm" class="modal-overlay" @click="showCloseConfirm = false">
+      <div class="modal" @click.stop>
+        <div class="modal-header">
+          <span>确认关闭</span>
+          <button class="modal-close" @click="showCloseConfirm = false">×</button>
+        </div>
+        <div class="modal-body">
+          <p v-if="openTerminalsCount > 0">
+            即将关闭所有打开的终端 ({{ openTerminalsCount }} 个)。
+          </p>
+          <p>确定要关闭 AITerm 吗？</p>
+          <p class="close-warning">关闭后，所有终端会话将被终止。</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-cancel" @click="showCloseConfirm = false">取消</button>
+          <button class="btn-confirm btn-close" @click="confirmClose">确定关闭</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script lang="ts">
 import { defineComponent } from 'vue'
-import { windowMinimize, windowMaximize, windowClose, windowIsMaximized, killPort } from '../api'
+import { windowMinimize, windowMaximize, windowClose, windowIsMaximized, killPort, getOpenTerminalsCount } from '../api'
 import { appBusiness } from '../store/AppBusiness'
 
 export default defineComponent({
@@ -73,7 +94,9 @@ export default defineComponent({
     return {
       isMaximized: false,
       showKillPortModal: false,
-      killPortInput: ''
+      killPortInput: '',
+      showCloseConfirm: false,
+      openTerminalsCount: 0
     }
   },
 
@@ -91,7 +114,13 @@ export default defineComponent({
       this.isMaximized = await windowIsMaximized()
     },
 
-    handleClose() {
+    async handleClose() {
+      this.openTerminalsCount = await getOpenTerminalsCount()
+      this.showCloseConfirm = true
+    },
+
+    confirmClose() {
+      this.showCloseConfirm = false
       windowClose()
     },
 
@@ -267,6 +296,12 @@ export default defineComponent({
   margin-bottom: 8px;
 }
 
+.modal-body p {
+  font-size: 13px;
+  color: #333333;
+  margin: 0 0 8px 0;
+}
+
 .modal-body input {
   width: 100%;
   padding: 8px 12px;
@@ -317,5 +352,19 @@ export default defineComponent({
 
 .btn-confirm:hover {
   background: #005a9e;
+}
+
+.close-warning {
+  color: #c42b1c;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.btn-close {
+  background: #c42b1c;
+}
+
+.btn-close:hover:not(:disabled) {
+  background: #a02622;
 }
 </style>

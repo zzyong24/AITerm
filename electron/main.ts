@@ -150,6 +150,11 @@ function registerIpcHandlers() {
     return ptyService.listSessions()
   })
 
+  ipcMain.handle('get-open-terminals-count', async () => {
+    const sessions = ptyService.listSessions()
+    return sessions.length
+  })
+
   // 项目相关
   ipcMain.handle('get-projects', async () => {
     const projects = projectService.getProjects()

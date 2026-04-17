@@ -18,6 +18,7 @@
             <span class="commit-date">{{ formatDate(lastCommit.date) }}</span>
           </div>
         </div>
+        <button class="modal-close-btn" @click="$emit('cancel')" title="关闭">×</button>
       </div>
       <div class="modal-body">
         <div v-if="loading" class="commit-loading">加载中...</div>
@@ -74,6 +75,12 @@
             :class="{ loading: committing }" title="推送到远程">
             <span v-if="committing" class="btn-spinner" />
             <span>推送</span>
+          </button>
+          <button class="btn-action btn-commit-all" @click="handleCommitAll"
+            :disabled="!canCommitAll || committing" :class="{ loading: committing }"
+            title="git add . && git commit -m">
+            <span v-if="committing" class="btn-spinner" />
+            <span>全部提交</span>
           </button>
         </div>
         <div class="footer-right">
@@ -262,9 +269,28 @@ export default defineComponent({
 }
 
 .modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
   padding: 12px 16px;
   background: #f5f5f5;
   border-bottom: 1px solid #e0e0e0;
+}
+
+.modal-close-btn {
+  background: transparent;
+  border: none;
+  color: #858585;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-left: 12px;
+}
+
+.modal-close-btn:hover {
+  color: #333333;
 }
 
 .header-info {
