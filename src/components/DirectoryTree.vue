@@ -6,6 +6,7 @@
       :selected="selectedKeys.length > 0" @select="onSelect" @expand="onExpand">
       <template #title="{ dataRef }">
         <span class="tree-node-title" :class="{ 'git-ignored': dataRef.isGitIgnored }" :data-path="dataRef.path"
+          @dblclick="(e) => onNodeDoubleClick(e, dataRef.path, dataRef.isDirectory)"
           @contextmenu="(e) => onNodeContextMenu(e, dataRef.path, dataRef.isDirectory)">
           {{ dataRef.title }}
           <span v-if="dataRef.hasGitDir" class="tree-git-icon-wrapper">
@@ -316,6 +317,15 @@ export default defineComponent({
       this.contextMenu.visible = false
     },
 
+    onNodeDoubleClick(e: MouseEvent, path: string, isDirectory: boolean) {
+      // 只有文件才支持双击打开，目录忽略
+      if (isDirectory) return
+      if (!path) return
+
+      // 调用编辑文件的方法
+      this.handleEditFileByPath(path)
+    },
+
     async handleOpenTerminal() {
       const dirPath = this.contextMenu.path
       // 用 rootPath 查找项目信息
@@ -343,6 +353,29 @@ export default defineComponent({
     handleSearchInDirectory() {
       this.$emit('search-in-directory', this.contextMenu.path)
       this.closeContextMenu()
+    },
+
+    async handleEditFileByPath(filePath: string) {
+      if (!filePath) {
+        return
+      }
+      try {
+        // 根据 rootPath 查找对应的项目
+        const project = appBusiness.projects.find(p => this.rootPath.startsWith(p.path) || this.rootPath === p.path)
+        if (!project) {
+          alert('找不到所属项目，无法编辑文件')
+          return
+        }
+        const content = await apiReadFile(filePath)
+        this.$emit('open-editor', {
+          projectId: project.id,
+          projectName: project.name,
+          path: filePath,
+          content
+        })
+      } catch (e) {
+        alert(`读取文件失败: ${e}`)
+      }
     },
 
     async handleEditFile() {

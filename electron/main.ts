@@ -12,6 +12,9 @@ let gitService: any = null
 
 let mainWindow: BrowserWindow | null = null
 
+// 动态导入 ESM 模块（绕过 TypeScript CommonJS 编译限制）
+const dynamicImport = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+
 // 加载服务
 async function loadServices() {
   const electronLog = await import('electron-log')
@@ -19,9 +22,11 @@ async function loadServices() {
   log.transports.file.level = 'info'
   log.info('Application starting...')
 
-  const { PtyService } = await import('./services/PtyService')
-  const { ProjectService } = await import('./services/ProjectService')
-  const { FileService } = await import('./services/FileService')
+  const servicesPath = join(app.getAppPath(), 'server/services')
+
+  const { PtyService } = await dynamicImport(join(servicesPath, 'PtyService.mjs'))
+  const { ProjectService } = await dynamicImport(join(servicesPath, 'ProjectService.mjs'))
+  const { FileService } = await dynamicImport(join(servicesPath, 'FileService.mjs'))
   const { GitService } = await import('../shared/services/GitService')
 
   ptyService = new PtyService()
@@ -120,7 +125,7 @@ function createWindow() {
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
   } else {
-    mainWindow.loadFile(join(__dirname, '../dist/index.html'))
+    mainWindow.loadFile(join(__dirname, '../../dist/index.html'))
   }
 
   mainWindow.on('closed', () => {

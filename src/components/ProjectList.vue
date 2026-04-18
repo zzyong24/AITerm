@@ -171,6 +171,7 @@
         :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }" @click.stop>
         <template v-if="contextMenu.type === 'project'">
           <div class="context-menu-item" @click="handleLaunchTerminal">创建终端</div>
+          <div class="context-menu-item" @click="handleLaunchBrowser">打开浏览器</div>
           <div class="context-menu-item" v-if="hasTerminalsToRestore" @click="handleRestoreTerminals">恢复终端</div>
           <div class="context-menu-separator" />
           <div class="context-menu-item" @click="handleSearchInDirectory">在目录中搜索</div>
@@ -614,7 +615,7 @@ export default defineComponent({
       if (!this.commitDialog.repoPath || files.length === 0) return
       this.commitDialog.committing = true
       try {
-        const result = await apiGitCommit(this.commitDialog.repoPath, message, files)
+        const result = await apiGitCommit(this.commitDialog.repoPath, message, [...files])
         if (result.success) {
           alert('提交成功')
           await this.refreshCommitDialog()
@@ -752,6 +753,13 @@ export default defineComponent({
     handleLaunchTerminal() {
       if (this.contextMenu.project) {
         this.$emit('launch', this.contextMenu.project)
+      }
+      this.closeContextMenu()
+    },
+
+    handleLaunchBrowser() {
+      if (this.contextMenu.project) {
+        appBusiness.launchBrowser(this.contextMenu.project.id, this.contextMenu.project.name)
       }
       this.closeContextMenu()
     },

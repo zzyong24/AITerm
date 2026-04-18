@@ -16,6 +16,14 @@
             <polyline points="7 3 7 8 15 8" />
           </svg>
         </button>
+        <button class="toolbar-btn" @click="handleRefresh" title="刷新">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 2v6h-6" />
+            <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+            <path d="M3 22v-6h6" />
+            <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+          </svg>
+        </button>
       </div>
 
       <!-- 文件名 -->
@@ -56,7 +64,7 @@ import { json } from '@codemirror/lang-json'
 import { python } from '@codemirror/lang-python'
 import { appBusiness, AppEvents } from '../store/AppBusiness'
 import { eventBus } from '../utils/EventBus'
-import { writeFile as apiWriteFile } from '../api'
+import { writeFile as apiWriteFile, readFile as apiReadFile } from '../api'
 import { alert } from '../plugins/MessageBox'
 
 export default defineComponent({
@@ -314,6 +322,28 @@ export default defineComponent({
           appBusiness.markEditorSaved(this.currentEditor.id)
         } catch (e) {
           alert(`保存失败: ${e}`)
+        }
+      })
+    },
+
+    async handleRefresh() {
+      if (!this.currentEditor) return
+      this.$nextTick(async () => {
+        try {
+          const content = await apiReadFile(this.currentEditor.path)
+          appBusiness.updateEditorContent(this.currentEditor.id, content)
+          if (this.editorView) {
+            const transaction = this.editorView.state.update({
+              changes: {
+                from: 0,
+                to: this.editorView.state.doc.length,
+                insert: content
+              }
+            })
+            this.editorView.dispatch(transaction)
+          }
+        } catch (e) {
+          alert(`刷新失败: ${e}`)
         }
       })
     },

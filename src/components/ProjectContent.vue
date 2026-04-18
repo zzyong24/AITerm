@@ -10,7 +10,8 @@
         @click="handleSelectItem(item)"
       >
         <DesktopOutlined v-if="item.type === 'terminal'" class="tab-icon" />
-        <FileTextOutlined v-else class="tab-icon" />
+        <FileTextOutlined v-else-if="item.type === 'editor'" class="tab-icon" />
+        <GlobalOutlined v-else-if="item.type === 'browser'" class="tab-icon" />
         <span>{{ item.name }}</span>
         <span v-if="item.modified" class="modified-dot">●</span>
         <button
@@ -19,9 +20,14 @@
           @click.stop="handleCloseTerminal(item.id)"
         >×</button>
         <button
-          v-else
+          v-else-if="item.type === 'editor'"
           class="tab-close"
           @click.stop="handleCloseEditor(item.id)"
+        >×</button>
+        <button
+          v-else-if="item.type === 'browser'"
+          class="tab-close"
+          @click.stop="handleCloseBrowser(item.id)"
         >×</button>
       </div>
       <div v-if="items.length === 0" class="no-items">
@@ -47,6 +53,12 @@
           :is-active="projectTab.activeItemId === item.id"
           :class="{ inactive: projectTab.activeItemId !== item.id }"
         />
+        <BrowserView
+          v-else-if="item.type === 'browser'"
+          :browser-id="item.id"
+          :is-active="projectTab.activeItemId === item.id"
+          :class="{ inactive: projectTab.activeItemId !== item.id }"
+        />
       </template>
     </div>
   </div>
@@ -54,11 +66,12 @@
 
 <script lang="ts">
 import { defineComponent } from 'vue'
-import { appBusiness, AppEvents, type TabItem, type TerminalSession, type EditorTab, type ProjectTab } from '../store/AppBusiness'
+import { appBusiness, AppEvents, type TabItem, type TerminalSession, type EditorTab, type BrowserTab, type ProjectTab } from '../store/AppBusiness'
 import { eventBus } from '../utils/EventBus'
-import { DesktopOutlined, FileTextOutlined } from '@ant-design/icons-vue'
+import { DesktopOutlined, FileTextOutlined, GlobalOutlined } from '@ant-design/icons-vue'
 import Terminal from './Terminal.vue'
 import CodeEditor from './CodeEditor.vue'
+import BrowserView from './BrowserView.vue'
 
 export default defineComponent({
   name: 'ProjectContent',
@@ -66,8 +79,10 @@ export default defineComponent({
   components: {
     Terminal,
     CodeEditor,
+    BrowserView,
     DesktopOutlined,
-    FileTextOutlined
+    FileTextOutlined,
+    GlobalOutlined
   },
 
   props: {
@@ -83,7 +98,8 @@ export default defineComponent({
       localActiveItemId: null as string | null,
       // 全局数据
       sessions: [] as TerminalSession[],
-      editors: [] as EditorTab[]
+      editors: [] as EditorTab[],
+      browsers: [] as BrowserTab[]
     }
   },
 
@@ -128,15 +144,18 @@ export default defineComponent({
     eventBus.on(AppEvents.TABS_CHANGE, this.handleTabsChange)
     eventBus.on(AppEvents.SESSIONS_CHANGE, this.handleSessionsChange)
     eventBus.on(AppEvents.EDITORS_CHANGE, this.handleEditorsChange)
+    eventBus.on(AppEvents.BROWSERS_CHANGE, this.handleBrowsersChange)
 
     this.sessions = [...appBusiness.sessions]
     this.editors = [...appBusiness.editors]
+    this.browsers = [...appBusiness.browsers]
   },
 
   beforeUnmount() {
     eventBus.off(AppEvents.TABS_CHANGE, this.handleTabsChange)
     eventBus.off(AppEvents.SESSIONS_CHANGE, this.handleSessionsChange)
     eventBus.off(AppEvents.EDITORS_CHANGE, this.handleEditorsChange)
+    eventBus.off(AppEvents.BROWSERS_CHANGE, this.handleBrowsersChange)
   },
 
   methods: {
@@ -145,6 +164,9 @@ export default defineComponent({
     },
     handleEditorsChange(editors: EditorTab[]) {
       this.editors = [...editors]
+    },
+    handleBrowsersChange(browsers: BrowserTab[]) {
+      this.browsers = [...browsers]
     },
     handleTabsChange(tabs: ProjectTab[]) {
       // tabs 是全局的，这里不需要处理，由 props 变化触发更新
@@ -174,6 +196,10 @@ export default defineComponent({
 
     handleCloseEditor(editorId: string) {
       appBusiness.closeEditor(editorId)
+    },
+
+    handleCloseBrowser(browserId: string) {
+      appBusiness.closeBrowser(browserId)
     }
   }
 })

@@ -22,7 +22,14 @@
       <button class="sub-tab add-sub" @click="handleSplit" title="拆分终端">+</button>
     </div>
 
-    <div ref="terminalContainer" class="terminal-container"></div>
+    <div ref="terminalContainer" class="terminal-container" @contextmenu="handleContextMenu"></div>
+
+    <!-- 右键菜单 -->
+    <div v-if="contextMenu.visible" class="context-menu"
+      :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }" @click.stop>
+      <div class="context-menu-item" @click="handleOpenInBrowser">在浏览器中打开</div>
+      <div class="context-menu-item" @click="handleCopySelection">复制</div>
+    </div>
 
     <!-- 终端操作按钮 -->
     <div class="terminal-actions">
@@ -46,6 +53,7 @@
 import { defineComponent } from 'vue'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
 import { terminalOutputListener, terminalClosedListener, writeToTerminal, resizeTerminal, saveTerminalHistory, loadTerminalHistory } from '../api'
 import { appBusiness, AppEvents } from '../store/AppBusiness'
@@ -95,7 +103,13 @@ export default defineComponent({
       outputUnsubscribe: null as (() => void) | null,
       closedUnsubscribe: null as (() => void) | null,
       resizeObserver: null as ResizeObserver | null,
-      historyEntries: [] as { type: 'input' | 'output'; content: string; timestamp: number }[]
+      historyEntries: [] as { type: 'input' | 'output'; content: string; timestamp: number }[],
+      contextMenu: {
+        visible: false,
+        x: 0,
+        y: 0,
+        selectedText: ''
+      }
     }
   },
 
@@ -158,6 +172,9 @@ export default defineComponent({
     //   this.loadHistory()
     // })
 
+    // 监听窗口点击以关闭右键菜单
+    window.addEventListener('click', this.closeContextMenu)
+
     // 监听后端 PTY 退出事件
     this.closedUnsubscribe = terminalClosedListener((data) => {
       if (data.session_id === this.id) {
@@ -182,6 +199,7 @@ export default defineComponent({
   },
 
   beforeUnmount() {
+    window.removeEventListener('click', this.closeContextMenu)
     eventBus.off(AppEvents.SETTINGS_CHANGE, this.handleSettingsChange)
     // TODO: 暂时禁用会话历史
     // this.saveHistory()
@@ -239,6 +257,16 @@ export default defineComponent({
       this.fitAddon = new FitAddon()
       this.terminal.loadAddon(this.fitAddon)
 
+      // 加载 WebLinksAddon 并监听链接点击
+      const webLinksAddon = new WebLinksAddon((event, uri) => {
+        event.preventDefault()
+        const session = appBusiness.sessions.find(s => s.id === this.id)
+        if (session?.projectId) {
+          appBusiness.launchBrowser(session.projectId, session.projectName || '浏览器', uri)
+        }
+      })
+      this.terminal.loadAddon(webLinksAddon)
+
       const container = this.$refs.terminalContainer as HTMLElement
       if (container) {
         this.terminal.open(container)
@@ -256,6 +284,14 @@ export default defineComponent({
 
         this.terminal.onResize(({ cols, rows }) => {
           resizeTerminal(this.id, rows, cols)
+        })
+
+        // 监听选择变化
+        this.terminal.onSelectionChange(() => {
+          const selection = this.terminal?.selection
+          if (selection && selection.length > 0) {
+            this.contextMenu.selectedText = selection
+          }
         })
 
         this.outputUnsubscribe = terminalOutputListener((data) => {
@@ -312,6 +348,59 @@ export default defineComponent({
 
     handleClose() {
       this.onClose(this.id)
+    },
+
+    handleContextMenu(e: MouseEvent) {
+      e.preventDefault()
+      const selection = this.terminal?.selection
+      if (selection && selection.length > 0) {
+        this.contextMenu.selectedText = selection
+        this.contextMenu.visible = true
+        this.contextMenu.x = e.clientX
+        this.contextMenu.y = e.clientY
+
+        // 调整菜单位置确保不超出屏幕
+        this.$nextTick(() => {
+          const menu = document.querySelector('.terminal-wrapper .context-menu') as HTMLElement
+          if (menu) {
+            const rect = menu.getBoundingClientRect()
+            if (rect.right > window.innerWidth) {
+              this.contextMenu.x = window.innerWidth - rect.width - 10
+            }
+            if (rect.bottom > window.innerHeight) {
+              this.contextMenu.y = window.innerHeight - rect.height - 10
+            }
+          }
+        })
+      }
+    },
+
+    closeContextMenu() {
+      this.contextMenu.visible = false
+    },
+
+    isUrl(text: string): boolean {
+      const urlPattern = /^https?:\/\/[^\s]+$/i
+      return urlPattern.test(text.trim())
+    },
+
+    handleOpenInBrowser() {
+      const text = this.contextMenu.selectedText.trim()
+      if (this.isUrl(text)) {
+        const session = appBusiness.sessions.find(s => s.id === this.id)
+        if (session?.projectId) {
+          appBusiness.launchBrowser(session.projectId, session.projectName || '浏览器', text)
+        }
+      }
+      this.closeContextMenu()
+    },
+
+    handleCopySelection() {
+      const text = this.contextMenu.selectedText
+      if (text) {
+        navigator.clipboard.writeText(text)
+      }
+      this.closeContextMenu()
     },
 
     async loadHistory() {
@@ -500,5 +589,27 @@ export default defineComponent({
 .action-btn.danger:hover {
   background: #5a1d1d;
   color: #f48771;
+}
+
+.context-menu {
+  position: fixed;
+  background: #252526;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  padding: 4px 0;
+  min-width: 140px;
+  z-index: 99999;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.context-menu-item {
+  padding: 6px 12px;
+  cursor: pointer;
+  color: #d4d4d4;
+  font-size: 13px;
+}
+
+.context-menu-item:hover {
+  background: #094771;
 }
 </style>

@@ -59,13 +59,23 @@ export interface EditorTab {
   scrollTrigger?: number
 }
 
-// Tab项（终端或编辑器）
+// Tab项（终端或编辑器或浏览器）
 export interface TabItem {
   id: string
-  type: 'terminal' | 'editor'
+  type: 'terminal' | 'editor' | 'browser'
   name: string
   modified?: boolean
   path?: string
+}
+
+// 浏览器Tab
+export interface BrowserTab {
+  id: string
+  projectId: string | null
+  projectName: string | null
+  url: string
+  name: string
+  zoom: number
 }
 
 // 项目Tab（包含该项目的所有终端和编辑器）
@@ -81,6 +91,7 @@ export const AppEvents = {
   PROJECTS_CHANGE: 'projectsChange',
   SESSIONS_CHANGE: 'sessionsChange',
   EDITORS_CHANGE: 'editorsChange',
+  BROWSERS_CHANGE: 'browsersChange',
   TABS_CHANGE: 'tabsChange',
   ACTIVE_PROJECT_CHANGE: 'activeProjectChange',
   SETTINGS_CHANGE: 'settingsChange',
@@ -94,6 +105,7 @@ class AppBusinessClass {
   projects: Project[] = []
   sessions: TerminalSession[] = []
   editors: EditorTab[] = []
+  browsers: BrowserTab[] = []
   activeIndex = -1
   activeEditorId: string | null = null
   homeDir = ''
@@ -117,6 +129,10 @@ class AppBusinessClass {
 
   private notifyEditorsChange() {
     eventBus.emit(AppEvents.EDITORS_CHANGE, [...this.editors])
+  }
+
+  private notifyBrowsersChange() {
+    eventBus.emit(AppEvents.BROWSERS_CHANGE, [...this.browsers])
   }
 
   private notifyTabsChange() {
@@ -551,6 +567,85 @@ class AppBusinessClass {
     }
     this.notifyEditorsChange()
     this.notifyTabsChange()
+  }
+
+  // ============ 浏览器 ============
+  launchBrowser(projectId: string, projectName: string, url: string = ''): string {
+    if (!projectId) {
+      console.error('浏览器必须归属于项目')
+      return ''
+    }
+    const tab = this.ensureProjectTab(projectId, projectName || '默认')
+
+    // 创建新浏览器
+    const id = `browser-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    const browserName = url.startsWith('http') ? new URL(url).hostname : url
+    this.browsers.push({
+      id,
+      projectId,
+      projectName,
+      url,
+      name: browserName,
+      zoom: 100
+    })
+    this.notifyBrowsersChange()
+
+    // 添加到 tabs
+    this.tabs = this.tabs.map(t => {
+      if (t.projectId !== projectId) return t
+      return {
+        ...t,
+        items: [...t.items, {
+          id,
+          type: 'browser' as const,
+          name: browserName
+        }],
+        activeItemId: id
+      }
+    })
+
+    this.activeProjectId = projectId
+    this.notifyActiveProjectChange(projectId)
+    this.notifyTabsChange()
+
+    return id
+  }
+
+  closeBrowser(browserId: string) {
+    // 从 tabs 中移除
+    this.tabs = this.tabs.map(tab => {
+      const newItems = tab.items.filter(i => i.id !== browserId)
+      return {
+        ...tab,
+        items: newItems,
+        activeItemId: newItems.length > 0 ? newItems[0].id : null
+      }
+    })
+
+    // 从 browsers 中移除
+    const browserIndex = this.browsers.findIndex(b => b.id === browserId)
+    if (browserIndex !== -1) {
+      this.browsers.splice(browserIndex, 1)
+    }
+
+    this.notifyBrowsersChange()
+    this.notifyTabsChange()
+  }
+
+  updateBrowserUrl(browserId: string, url: string) {
+    const browser = this.browsers.find(b => b.id === browserId)
+    if (browser) {
+      browser.url = url
+      this.notifyBrowsersChange()
+    }
+  }
+
+  updateBrowserZoom(browserId: string, zoom: number) {
+    const browser = this.browsers.find(b => b.id === browserId)
+    if (browser) {
+      browser.zoom = Math.max(25, Math.min(200, zoom))
+      this.notifyBrowsersChange()
+    }
   }
 
   updateEditorContent(editorId: string, content: string) {
