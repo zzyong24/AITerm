@@ -84,7 +84,6 @@
           </button>
         </div>
         <div class="footer-right">
-          <button class="btn-cancel" @click="$emit('cancel')" :disabled="committing">取消</button>
           <button class="btn-confirm" :disabled="!canCommit || committing" :class="{ loading: committing }"
             @click="handleCommit">
             <span v-if="committing" class="btn-spinner" />

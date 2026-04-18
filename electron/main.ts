@@ -146,7 +146,9 @@ function registerIpcHandlers() {
   })
 
   ipcMain.handle('close-terminal-session', async (_, sessionId: string) => {
+    console.log('[Main] close-terminal-session IPC received', { sessionId })
     await ptyService.close(sessionId)
+    console.log('[Main] close-terminal-session completed', { sessionId })
   })
 
   ipcMain.handle('list-sessions', async () => {
@@ -402,6 +404,14 @@ app.on('window-all-closed', () => {
   }
 })
 
-app.on('before-quit', () => {
-  ptyService?.closeAll()
+app.on('before-quit', async (e) => {
+  // 等待所有 PTY 会话关闭完成后再退出
+  e.preventDefault()
+  try {
+    await ptyService?.closeAll()
+  } catch (err) {
+    log?.error('Error closing PTY service:', err)
+  }
+  log?.info('All PTY sessions closed, proceeding with quit')
+  app.exit(0)
 })

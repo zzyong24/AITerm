@@ -122,28 +122,29 @@ export class PtyService extends EventEmitter {
       if (process.platform === 'win32') {
         execSync(`taskkill /T /F /PID ${pid}`)
       } else {
-        // 递归杀灭子进程
-        const killChildren = (parentPid: number) => {
-          try {
-            const output = execSync(`ps -o pid= -ppid ${parentPid}`).toString()
-            const childPids = output.trim().split('\n').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n))
-            for (const childPid of childPids) {
-              killChildren(childPid)
-              try {
-                process.kill(childPid, 'SIGKILL')
-              } catch (e) {
-                // ignore
-              }
-            }
-          } catch (e) {
-            // no children
-          }
-        }
-        killChildren(pid)
+        // 使用 process group 方式杀灭整个进程组
+        // 先获取进程组 ID (pgid)，然后杀整个组
+        let pgid: number = pid
         try {
-          process.kill(pid, 'SIGKILL')
+          const pgidOutput = execSync(`ps -o pgid= -p ${pid} 2>/dev/null | head -1`).toString().trim()
+          if (pgidOutput) {
+            pgid = parseInt(pgidOutput, 10)
+          }
         } catch (e) {
-          // ignore
+          // use original pid
+        }
+
+        // 杀整个进程组 (使用负的 pgid)
+        try {
+          process.kill(-pgid, 'SIGKILL')
+        } catch (e) {
+          // 如果进程组杀失败，尝试逐个杀
+          this.killAllDescendants(pid)
+          try {
+            process.kill(pid, 'SIGKILL')
+          } catch (e2) {
+            // ignore
+          }
         }
       }
     } catch (e) {
@@ -151,41 +152,122 @@ export class PtyService extends EventEmitter {
     }
   }
 
+  private killAllDescendants(pid: number): void {
+    try {
+      // 获取所有后代进程 (包括孙进程)
+      const output = execSync(`ps -o pid=,ppid= -A 2>/dev/null | awk '{print $1","$2}'`).toString()
+      const processes: { pid: number; ppid: number }[] = []
+      output.trim().split('\n').forEach(line => {
+        const parts = line.trim().split(',')
+        if (parts.length === 2) {
+          const p = parseInt(parts[0], 10)
+          const pp = parseInt(parts[1], 10)
+          if (!isNaN(p) && !isNaN(pp)) {
+            processes.push({ pid: p, ppid: pp })
+          }
+        }
+      })
+
+      // 构建进程树，找到 pid 的所有后代
+      const descendants = new Set<number>()
+      const findDescendants = (parentPid: number) => {
+        processes.forEach(p => {
+          if (p.ppid === parentPid && !descendants.has(p.pid)) {
+            descendants.add(p.pid)
+            findDescendants(p.pid)
+          }
+        })
+      }
+      findDescendants(pid)
+
+      // 从最深的后代开始杀
+      const sortedDescendants = Array.from(descendants).sort((a, b) => {
+        // 按 PID 倒序，这样子进程会在父进程之前被杀掉
+        return b - a
+      })
+
+      for (const childPid of sortedDescendants) {
+        try {
+          process.kill(childPid, 'SIGKILL')
+        } catch (e) {
+          // ignore - 进程可能已经退出
+        }
+      }
+    } catch (e) {
+      log.warn(`Failed to kill descendants for ${pid}:`, e)
+    }
+  }
+
   async close(sessionId: string): Promise<void> {
+    console.log('[PtyService] close called', { sessionId, sessionsCount: this.sessions.size })
     const session = this.sessions.get(sessionId)
     if (session) {
+      console.log('[PtyService] session found, killing...', { sessionId, pid: session.pty.pid })
       try {
         // 先杀灭整个进程树，防止子进程（如 dev server）残留
         this.killProcessTree(session.pty.pid)
         try {
           session.pty.kill('SIGKILL')
         } catch (e) {
-          // ignore
+          console.warn('[PtyService] pty.kill error:', e)
         }
         log.info(`Closed session ${sessionId}`)
+        console.log('[PtyService] session killed successfully', { sessionId })
       } catch (e) {
         log.warn(`Error closing session ${sessionId}:`, e)
+        console.error('[PtyService] error closing session:', { sessionId, error: e })
       } finally {
         this.sessions.delete(sessionId)
+        console.log('[PtyService] session deleted from map', { sessionId, remainingSessions: this.sessions.size })
       }
+    } else {
+      console.warn('[PtyService] session not found in map', { sessionId })
     }
   }
 
-  closeAll(): void {
-    for (const [sessionId, session] of this.sessions) {
-      try {
-        this.killProcessTree(session.pty.pid)
-        try {
-          session.pty.kill('SIGKILL')
-        } catch (e) {
-          // ignore
-        }
-        log.info(`Closed session ${sessionId}`)
-      } catch (e) {
-        log.warn(`Error closing session ${sessionId}:`, e)
+  closeAll(): Promise<void> {
+    return new Promise((resolve) => {
+      const sessions = Array.from(this.sessions.entries())
+      if (sessions.length === 0) {
+        resolve()
+        return
       }
-    }
-    this.sessions.clear()
+
+      let completed = 0
+      const checkDone = () => {
+        completed++
+        if (completed >= sessions.length) {
+          this.sessions.clear()
+          resolve()
+        }
+      }
+
+      for (const [sessionId, session] of sessions) {
+        try {
+          // 先尝试优雅终止，给进程一个清理的机会
+          try {
+            process.kill(-session.pty.pid, 'SIGTERM')
+          } catch (e) {
+            // ignore
+          }
+
+          // 等待一小段时间让进程优雅退出
+          setTimeout(() => {
+            try {
+              this.killProcessTree(session.pty.pid)
+              session.pty.kill('SIGKILL')
+            } catch (e) {
+              // ignore - 进程可能已经退出
+            }
+            log.info(`Closed session ${sessionId}`)
+            checkDone()
+          }, 100)
+        } catch (e) {
+          log.warn(`Error closing session ${sessionId}:`, e)
+          checkDone()
+        }
+      }
+    })
   }
 
   listSessions(): SessionInfo[] {

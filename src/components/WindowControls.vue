@@ -119,8 +119,21 @@ export default defineComponent({
       this.showCloseConfirm = true
     },
 
-    confirmClose() {
+    async confirmClose() {
       this.showCloseConfirm = false
+      // 先关闭所有终端会话
+      try {
+        const sessions = [...appBusiness.sessions]
+        console.log('[WindowControls] confirmClose: closing sessions', { count: sessions.length })
+        for (const session of sessions) {
+          console.log('[WindowControls] closing session:', session.id)
+          await appBusiness.closeSession(session.id)
+        }
+        console.log('[WindowControls] confirmClose: all sessions closed')
+      } catch (e) {
+        console.error('[WindowControls] confirmClose: error closing sessions:', e)
+      }
+      // 然后关闭窗口
       windowClose()
     },
 

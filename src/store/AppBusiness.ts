@@ -245,19 +245,31 @@ class AppBusinessClass {
   // 关闭项目Tab
   async closeProjectTab(projectId: string) {
     const tab = this.tabs.find(t => t.projectId === projectId)
-    if (!tab) return
+    if (!tab) {
+      console.log('[AppBusiness] closeProjectTab: tab not found', projectId)
+      return
+    }
+
+    console.log('[AppBusiness] closeProjectTab: starting', { projectId, itemsCount: tab.items.length })
 
     // 保存终端列表
-    await this.saveProjectTerminals(projectId)
+    try {
+      await this.saveProjectTerminals(projectId)
+    } catch (e) {
+      console.warn('[AppBusiness] saveProjectTerminals failed, continuing anyway:', e)
+    }
 
     // 关闭所有终端和编辑器
     for (const item of tab.items) {
+      console.log('[AppBusiness] closeProjectTab: closing item', { type: item.type, id: item.id })
       if (item.type === 'terminal') {
         await this.closeSession(item.id)
       } else {
         this.closeEditor(item.id)
       }
     }
+
+    console.log('[AppBusiness] closeProjectTab: completed', { projectId })
 
     this.tabs = this.tabs.filter(t => t.projectId !== projectId)
     this.notifyTabsChange()
@@ -343,10 +355,14 @@ class AppBusinessClass {
   }
 
   async closeSession(sessionId: string) {
+    console.log('[AppBusiness] closeSession: starting', { sessionId })
     // 调用 API 关闭后端终端
     try {
       await apiCloseTerminalSession(sessionId)
-    } catch { /* ignore */ }
+      console.log('[AppBusiness] closeSession: apiCloseTerminalSession succeeded', { sessionId })
+    } catch (e) {
+      console.error('[AppBusiness] closeSession: apiCloseTerminalSession failed', { sessionId, error: e })
+      /* ignore */ }
 
     // 从 tabs 中移除对应的 item
     this.tabs = this.tabs.map(tab => {
