@@ -110,14 +110,13 @@ export default defineComponent({
           })
         } else if (this.editorView && newEditor.content !== this.getEditorContent()) {
           // 内容被外部更新（如替换操作），同步到编辑器
-          const transaction = this.editorView.state.update({
+          this.editorView.dispatch({
             changes: {
               from: 0,
               to: this.editorView.state.doc.length,
               insert: newEditor.content
             }
           })
-          this.editorView.dispatch(transaction)
         }
       },
       immediate: false
@@ -331,17 +330,18 @@ export default defineComponent({
       this.$nextTick(async () => {
         try {
           const content = await apiReadFile(this.currentEditor.path)
-          appBusiness.updateEditorContent(this.currentEditor.id, content)
+          // 先直接更新视图，再更新 store，避免 store 变更触发的 watcher
+          // 与手动 dispatch 使用不同步的 state 导致 RangeError
           if (this.editorView) {
-            const transaction = this.editorView.state.update({
+            this.editorView.dispatch({
               changes: {
                 from: 0,
                 to: this.editorView.state.doc.length,
                 insert: content
               }
             })
-            this.editorView.dispatch(transaction)
           }
+          appBusiness.updateEditorContent(this.currentEditor.id, content)
         } catch (e) {
           alert(`刷新失败: ${e}`)
         }
