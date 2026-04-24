@@ -396,6 +396,9 @@ class AppBusinessClass {
       this.sessions.splice(index, 1)
     }
 
+    // 清理活跃度数据，防止内存泄漏
+    delete this.activityData[sessionId]
+
     // 通知更新
     this.notifySessionsChange()
     this.notifyTabsChange()

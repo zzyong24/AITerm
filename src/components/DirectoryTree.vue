@@ -411,10 +411,29 @@ export default defineComponent({
       this.closeContextMenu()
     },
 
+    removeNodeByPath(tree: TreeNode[], path: string): boolean {
+      for (let i = 0; i < tree.length; i++) {
+        if (tree[i].path === path) {
+          tree.splice(i, 1)
+          return true
+        }
+        if (tree[i].children) {
+          const removed = this.removeNodeByPath(tree[i].children!, path)
+          if (removed) return true
+        }
+      }
+      return false
+    },
+
     async confirmDelete() {
       try {
         await apiDeletePath(this.pathToDelete)
-        await this.loadTree()
+        this.removeNodeByPath(this.treeData, this.pathToDelete)
+        this.treeData = [...this.treeData]
+        // 如果被删除的节点当前处于选中状态，移除选中
+        if (this.selectedKeys.includes(this.pathToDelete)) {
+          this.selectedKeys = this.selectedKeys.filter(k => k !== this.pathToDelete)
+        }
       } catch (e) {
         alert(`删除失败: ${e}`)
       }

@@ -104,6 +104,7 @@ export default defineComponent({
       closedUnsubscribe: null as (() => void) | null,
       resizeObserver: null as ResizeObserver | null,
       historyEntries: [] as { type: 'input' | 'output'; content: string; timestamp: number }[],
+      maxHistoryEntries: 500,
       contextMenu: {
         visible: false,
         x: 0,
@@ -115,6 +116,10 @@ export default defineComponent({
 
   watch: {
     isActive(newVal) {
+      if (this.terminal) {
+        // 非活跃终端减少滚动缓冲，活跃时恢复，节省内存
+        this.terminal.options.scrollback = newVal ? 2000 : 500
+      }
       if (newVal) {
         this.$nextTick(() => {
           this.fit()
@@ -150,7 +155,7 @@ export default defineComponent({
             const text = new TextDecoder().decode(new Uint8Array(data.data))
             this.terminal?.write(text)
             // 记录输出历史
-            this.historyEntries.push({
+            this.addHistoryEntry({
               type: 'output',
               content: text,
               timestamp: Date.now()
@@ -251,7 +256,8 @@ export default defineComponent({
           selectionBackground: '#264f78'
         },
         cursorBlink: true,
-        cursorStyle: 'block'
+        cursorStyle: 'block',
+        scrollback: 2000
       })
 
       this.fitAddon = new FitAddon()
@@ -275,7 +281,7 @@ export default defineComponent({
         this.terminal.onData((data) => {
           writeToTerminal(this.id, data)
           // 记录输入历史
-          this.historyEntries.push({
+          this.addHistoryEntry({
             type: 'input',
             content: data,
             timestamp: Date.now()
@@ -299,7 +305,7 @@ export default defineComponent({
             const text = new TextDecoder().decode(new Uint8Array(data.data))
             this.terminal?.write(text)
             // 记录输出历史
-            this.historyEntries.push({
+            this.addHistoryEntry({
               type: 'output',
               content: text,
               timestamp: Date.now()
@@ -311,6 +317,16 @@ export default defineComponent({
 
         // 初始调整大小
         resizeTerminal(this.id, this.terminal.rows, this.terminal.cols)
+      }
+    },
+
+    addHistoryEntry(entry: { type: 'input' | 'output'; content: string; timestamp: number }) {
+      this.historyEntries.push(entry)
+      if (this.historyEntries.length > this.maxHistoryEntries) {
+        // 保留后半部分，避免频繁 shift 导致数组重分配
+        this.historyEntries = this.historyEntries.slice(
+          this.historyEntries.length - this.maxHistoryEntries
+        )
       }
     },
 
