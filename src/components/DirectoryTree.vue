@@ -752,7 +752,7 @@ export default defineComponent({
 
 :deep(.ant-tree-switcher) {
   color: #858585;
-  width: 16px;
+  width: 22px;
   flex-shrink: 0;
 }
 
@@ -762,6 +762,10 @@ export default defineComponent({
 
 :deep(.ant-tree-switcher) {
   background: transparent;
+}
+
+:deep(.ant-tree-indent-unit) {
+  width: 22px;
 }
 
 :deep(.ant-tree-iconContainer) {

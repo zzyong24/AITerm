@@ -297,44 +297,6 @@ export const windowIsFullscreen = () => Promise.resolve(false)
 export const windowToggleFullscreen = () => Promise.resolve()
 export const getOpenTerminalsCount = () => Promise.resolve(0)
 
-// 终端历史 (浏览器模式下使用HTTP API)
-export interface HistoryEntry {
-  type: 'input' | 'output'
-  content: string
-  timestamp: number
-}
-
-export const saveTerminalHistory = (projectPath: string, workingDir: string, entries: HistoryEntry[]) =>
-  apiCall('/save-terminal-history', {
-    method: 'POST',
-    body: JSON.stringify({ projectPath, workingDir, entries }),
-  })
-
-export const loadTerminalHistory = (projectPath: string, workingDir: string): Promise<HistoryEntry[]> =>
-  apiCall<HistoryEntry[]>('/load-terminal-history?projectPath=' + encodeURIComponent(projectPath) + '&workingDir=' + encodeURIComponent(workingDir))
-
-export const clearTerminalHistory = (projectPath: string, workingDir: string) =>
-  apiCall('/clear-terminal-history', {
-    method: 'POST',
-    body: JSON.stringify({ projectPath, workingDir }),
-  })
-
-// 终端列表保存/恢复
-export const saveTerminals = (projectPath: string, terminals: { workingDir: string }[]) =>
-  apiCall('/save-terminals', {
-    method: 'POST',
-    body: JSON.stringify({ projectPath, terminals }),
-  })
-
-export const loadTerminals = (projectPath: string): Promise<{ workingDir: string }[]> =>
-  apiCall<{ workingDir: string }[]>('/load-terminals?projectPath=' + encodeURIComponent(projectPath))
-
-export const clearTerminals = (projectPath: string) =>
-  apiCall('/terminals', {
-    method: 'DELETE',
-    body: JSON.stringify({ projectPath }),
-  })
-
 // WebSocket 连接
 type MessageHandler = (data: any) => void
 

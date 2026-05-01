@@ -55,7 +55,7 @@ import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
-import { terminalOutputListener, terminalClosedListener, writeToTerminal, resizeTerminal, saveTerminalHistory, loadTerminalHistory } from '../api'
+import { terminalOutputListener, terminalClosedListener, writeToTerminal, resizeTerminal } from '../api'
 import { appBusiness, AppEvents } from '../store/AppBusiness'
 import { eventBus } from '../utils/EventBus'
 
@@ -420,51 +420,11 @@ export default defineComponent({
     },
 
     async loadHistory() {
-      try {
-        // 等待一小段时间确保会话已创建
-        await new Promise(resolve => setTimeout(resolve, 100))
-
-        const session = appBusiness.sessions.find(s => s.id === this.id)
-        if (!session || !session.projectId) {
-          console.log('[History] Session not found or no projectId:', this.id)
-          return
-        }
-        const project = appBusiness.projects.find(p => p.id === session.projectId)
-        if (!project) {
-          console.log('[History] Project not found for session:', session.projectId)
-          return
-        }
-
-        // 使用工作目录作为历史记录的标识
-        const historyKey = session.workingDir || project.path
-        console.log('[History] Loading history for:', historyKey)
-        const entries = await loadTerminalHistory(project.path, historyKey)
-        console.log('[History] Loaded entries:', entries.length)
-        if (entries.length > 0) {
-          this.historyEntries = entries
-          // 将历史内容写入终端
-          const text = entries.map(e => e.content).join('')
-          this.terminal?.write(text)
-        }
-      } catch (e) {
-        console.warn('Failed to load terminal history:', e)
-      }
+      // 禁用：不再从 .aiterm 目录加载终端历史
     },
 
     async saveHistory() {
-      if (this.historyEntries.length === 0) return
-      try {
-        const session = appBusiness.sessions.find(s => s.id === this.id)
-        if (!session || !session.projectId) return
-        const project = appBusiness.projects.find(p => p.id === session.projectId)
-        if (!project) return
-
-        // 使用工作目录作为历史记录的标识
-        const historyKey = session.workingDir || project.path
-        await saveTerminalHistory(project.path, historyKey, this.historyEntries)
-      } catch (e) {
-        console.warn('Failed to save terminal history:', e)
-      }
+      // 禁用：不再保存终端历史到 .aiterm 目录
     }
   }
 })

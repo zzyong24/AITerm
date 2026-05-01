@@ -275,7 +275,6 @@ import {
   gitPull as apiGitPull,
   gitDiscardChanges as apiGitDiscardChanges,
   deletePath as apiDeletePath,
-  loadTerminals,
   type GitStatus
 } from '../api'
 import { alert, confirm, prompt } from '../plugins/MessageBox'
@@ -804,17 +803,8 @@ export default defineComponent({
         path
       }
 
-      // 检查是否有可恢复的终端
-      if (type === 'project' && project) {
-        try {
-          const terminals = await loadTerminals(project.path)
-          this.hasTerminalsToRestore = terminals.length > 0
-        } catch {
-          this.hasTerminalsToRestore = false
-        }
-      } else {
-        this.hasTerminalsToRestore = false
-      }
+      // 禁用：不再从 .aiterm/terminals.json 加载终端列表
+      this.hasTerminalsToRestore = false
 
       setTimeout(() => {
         const menu = document.querySelector('.context-menu') as HTMLElement
@@ -1763,7 +1753,7 @@ export default defineComponent({
 }
 
 .project-tree-container {
-  margin-left: 0;
+  margin-left: 12px;
 }
 
 .context-menu {

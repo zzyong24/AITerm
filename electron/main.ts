@@ -258,32 +258,6 @@ function registerIpcHandlers() {
     return await fileService.killPort(port)
   })
 
-  // 终端历史
-  ipcMain.handle('save-terminal-history', async (_, projectPath: string, workingDir: string, entries: any[]) => {
-    fileService.saveTerminalHistory(projectPath, workingDir, entries)
-  })
-
-  ipcMain.handle('load-terminal-history', async (_, projectPath: string, workingDir: string) => {
-    return fileService.loadTerminalHistory(projectPath, workingDir)
-  })
-
-  ipcMain.handle('clear-terminal-history', async (_, projectPath: string, workingDir: string) => {
-    fileService.clearTerminalHistory(projectPath, workingDir)
-  })
-
-  // 终端列表保存/恢复
-  ipcMain.handle('save-terminals', async (_, projectPath: string, terminals: { workingDir: string }[]) => {
-    fileService.saveTerminals(projectPath, terminals)
-  })
-
-  ipcMain.handle('load-terminals', async (_, projectPath: string) => {
-    return fileService.loadTerminals(projectPath)
-  })
-
-  ipcMain.handle('clear-terminals', async (_, projectPath: string) => {
-    fileService.clearTerminals(projectPath)
-  })
-
   ipcMain.handle('is-git-ignored', async (_, path: string) => {
     return fileService.isGitIgnored(path)
   })
