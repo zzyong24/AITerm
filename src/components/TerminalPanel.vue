@@ -24,8 +24,7 @@
         <div class="activity-header">
           <div class="activity-name">
             {{ session.projectName || '终端' }}
-            <span v-if="waitingMap[session.id]" class="attention-badge waiting" :title="waitingMap[session.id]">需介入</span>
-            <span v-else-if="failedMap[session.id]" class="attention-badge failed" :title="'退出码: ' + failedMap[session.id]">失败</span>
+            <span v-if="failedMap[session.id]" class="attention-badge failed" :title="'退出码: ' + failedMap[session.id]">失败</span>
           </div>
           <div class="activity-last">{{ getActivityLast(session.id) }}</div>
         </div>
@@ -47,8 +46,9 @@
           :key="session.id"
           class="terminal-item"
           :class="{ active: session.id === activeSessionId }"
+          @click.stop="handleSelectTerminal(session.id)"
         >
-          <div class="terminal-item-main" @click="handleSelectTerminal(session.id)">
+          <div class="terminal-item-main">
             <div class="terminal-status" :class="{ alive: session.alive }"></div>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <rect x="2" y="4" width="20" height="16" rx="2" />
@@ -101,8 +101,6 @@ export default defineComponent({
       activityData: {} as Record<string, { last: number; bytes: number }>,
       waitingMap: {} as Record<string, string>,
       failedMap: {} as Record<string, number>,
-      tick: 0,
-      tickTimer: null as ReturnType<typeof setInterval> | null
     }
   },
   computed: {
@@ -250,7 +248,6 @@ export default defineComponent({
       return `${Math.floor(age / 86400)}天前`
     },
     handleSessionWaiting(sessionId: string, reason: string) {
-      this.waitingMap[sessionId] = reason
     },
     handleSessionFailed(sessionId: string, exitCode: number) {
       this.failedMap[sessionId] = exitCode
