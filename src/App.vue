@@ -2,17 +2,33 @@
   <div class="app">
     <WindowControls class="window-controls-bar" />
     <div class="app-body">
-      <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }"
-        :style="{ width: (sidebarCollapsed ? 40 : localSidebarWidth) + 'px' }">
-        <ProjectList :collapsed="sidebarCollapsed" @toggle-collapse="handleToggleSidebar"
+      <!-- Activity Bar -->
+      <ActivityBar
+        ref="activityBar"
+        @toggle-sidebar="handleToggleSidebar"
+        @panel-change="handlePanelChange"
+      />
+
+      <!-- Sidebar (collapsible, shows based on active panel) -->
+      <aside class="sidebar" :class="{ collapsed: sidebarCollapsed || !activeSidebarPanel }"
+        :style="{ width: (sidebarCollapsed || !activeSidebarPanel ? 0 : localSidebarWidth) + 'px' }">
+        <!-- 文件浏览器面板 -->
+        <ProjectList v-show="activeSidebarPanel === 'explorer'" :collapsed="sidebarCollapsed"
           @switch-project="handleSwitchProject" @launch="handleLaunch" @open-editor="handleOpenEditor" />
+        <!-- 搜索面板 -->
+        <SearchPanel v-show="activeSidebarPanel === 'search'" @open-editor="handleOpenEditor" />
+        <!-- Kill Port 面板 -->
+        <KillPortPanel v-show="activeSidebarPanel === 'killport'" />
+        <!-- 终端面板 -->
+        <TerminalPanel v-show="activeSidebarPanel === 'terminal'" @launch="handleLaunch" />
       </aside>
-      <div v-if="!sidebarCollapsed" class="sidebar-resizer" @mousedown="startResize"></div>
+
+      <!-- Main Content -->
       <main v-if="localTabs.length > 0" class="main-content">
         <!-- 项目分组标签栏 -->
-        <div class="project-tabs">
+        <div class="project-tabs" @click.stop>
           <div v-for="tab in localTabs" :key="tab.projectId" class="project-tab"
-            :class="{ active: activeProjectId === tab.projectId }" @click="handleSwitchProject(tab.projectId)">
+            :class="{ active: activeProjectId === tab.projectId }" @click.stop="handleSwitchProject(tab.projectId)">
             {{ tab.projectName }}
             <button v-if="tab.projectId !== 'default'" class="project-tab-close"
               @click.stop="handleCloseProjectTab(tab.projectId)">×</button>
@@ -43,20 +59,28 @@
 import { defineComponent } from 'vue'
 import { appBusiness, AppEvents, type ProjectTab, type Project } from './store/AppBusiness'
 import { eventBus } from './utils/EventBus'
+import ActivityBar from './components/ActivityBar.vue'
 import ProjectList from './components/ProjectList.vue'
 import ProjectContent from './components/ProjectContent.vue'
 import Settings from './components/Settings.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
 import WindowControls from './components/WindowControls.vue'
+import SearchPanel from './components/SearchPanel.vue'
+import KillPortPanel from './components/KillPortPanel.vue'
+import TerminalPanel from './components/TerminalPanel.vue'
 
 export default defineComponent({
   name: 'App',
   components: {
+    ActivityBar,
     ProjectList,
     ProjectContent,
     Settings,
     ConfirmDialog,
-    WindowControls
+    WindowControls,
+    SearchPanel,
+    KillPortPanel,
+    TerminalPanel
   },
 
   data() {
@@ -72,7 +96,9 @@ export default defineComponent({
       closeConfirmModal: false,
       closeConfirmMessage: '',
       closeSessionId: '',
-      pendingCloseProjectId: '' as string | null
+      pendingCloseProjectId: '' as string | null,
+      // Activity Bar 状态
+      activeSidebarPanel: null as string | null
     }
   },
 
@@ -131,6 +157,18 @@ export default defineComponent({
       this.projects = [...data.projects]
     },
 
+    // Activity Bar 面板切换
+    handlePanelChange(panel: string | null) {
+      this.activeSidebarPanel = panel
+    },
+
+    // 点击 Main Content 时折叠 Sidebar
+    handleMainContentClick() {
+      if (this.activeSidebarPanel) {
+        this.activeSidebarPanel = null
+      }
+    },
+
     // 业务方法
     async handleLaunch(project: { id: string; name: string; path: string }) {
       await appBusiness.launchTerminal(project.id, project.name, project.path)
@@ -162,7 +200,11 @@ export default defineComponent({
     },
 
     handleToggleSidebar() {
-      appBusiness.toggleSidebar()
+      if (this.activeSidebarPanel) {
+        this.activeSidebarPanel = null
+      } else {
+        this.activeSidebarPanel = 'explorer'
+      }
     },
 
     handleToggleSettings() {
@@ -182,7 +224,7 @@ export default defineComponent({
       }
       if (e.ctrlKey && e.key === 'b') {
         e.preventDefault()
-        appBusiness.toggleSidebar()
+        this.handleToggleSidebar()
       }
     },
 
@@ -238,31 +280,18 @@ body,
 }
 
 .sidebar {
-  min-width: 180px;
-  max-width: 500px;
   background: #252526;
   border-right: 1px solid #3e3e42;
   display: flex;
   flex-direction: column;
-  transition: width 0.2s;
+  transition: width 0.2s, min-width 0.2s;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
 .sidebar.collapsed {
-  width: 40px !important;
-  min-width: 40px;
-}
-
-.sidebar-resizer {
-  width: 4px;
-  height: 100%;
-  flex-shrink: 0;
-  background: transparent;
-  cursor: col-resize;
-  transition: background 0.2s;
-}
-
-.sidebar-resizer:hover {
-  background: #007acc;
+  width: 0 !important;
+  min-width: 0 !important;
 }
 
 .main-content {
