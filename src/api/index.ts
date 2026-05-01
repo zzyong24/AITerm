@@ -12,6 +12,7 @@ const api = isElectron ? ipcApi : httpApi
 
 // 重新导出类型
 export type { Project, SessionInfo, GitStatus, ChildTerminal, TerminalSession } from './http'
+export type { WatcherEvent } from './electron-ipc'
 
 // 重新导出所有函数（使用运行时选择）
 export const createTerminalSession = api.createTerminalSession
@@ -66,6 +67,41 @@ export const windowSetFullscreen = api.windowSetFullscreen
 export const windowIsFullscreen = api.windowIsFullscreen
 export const windowToggleFullscreen = api.windowToggleFullscreen
 export const getOpenTerminalsCount = api.getOpenTerminalsCount
+
+// 文件监听
+export const startWatcher = api.startWatcher
+export const stopWatcher = api.stopWatcher
+export const stopAllWatchers = api.stopAllWatchers
+export const getWatcherInfo = api.getWatcherInfo
+export const watcherAddListener = api.watcherAddListener
+export const watcherUnlinkListener = api.watcherUnlinkListener
+export const watcherAddDirListener = api.watcherAddDirListener
+export const watcherUnlinkDirListener = api.watcherUnlinkDirListener
+
+// 终端历史
+export const saveTerminalHistory = api.saveTerminalHistory
+export const loadTerminalHistory = api.loadTerminalHistory
+export const clearTerminalHistory = api.clearTerminalHistory
+
+// 终端列表保存/恢复
+export const saveTerminals = api.saveTerminals
+export const loadTerminals = api.loadTerminals
+export const clearTerminals = api.clearTerminals
+export const renameTerminal = api.renameTerminal
+
+// 编辑器列表保存/恢复
+export const saveEditors = api.saveEditors
+export const loadEditors = api.loadEditors
+
+// 跨端持久化 API（SQLite）
+export type { PersistedState } from './http'
+export const getFullState = api.getFullState
+export const updateFullState = api.updateFullState
+export const persistTerminal = api.persistTerminal
+export const updatePersistedTerminal = api.updatePersistedTerminal
+export const removePersistedTerminal = api.removePersistedTerminal
+export const updateEditors = api.updateEditors
+export const removeEditor = api.removeEditor
 
 // 导出环境检测结果
 export const isRunningInElectron = isElectron

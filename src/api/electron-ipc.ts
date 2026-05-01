@@ -232,3 +232,67 @@ export const windowToggleFullscreen = () => window.electronAPI.invoke('window-to
 
 // 查询打开的终端数量
 export const getOpenTerminalsCount = () => window.electronAPI.invoke<number>('get-open-terminals-count')
+
+// 文件监听
+export const startWatcher = (projectPath: string, rootPath: string) =>
+  window.electronAPI.invoke('start-watcher', projectPath, rootPath)
+
+export const stopWatcher = (projectPath: string) =>
+  window.electronAPI.invoke('stop-watcher', projectPath)
+
+export const stopAllWatchers = () =>
+  window.electronAPI.invoke('stop-all-watchers')
+
+export const getWatcherInfo = () =>
+  window.electronAPI.invoke<string[]>('get-watcher-info')
+
+export interface WatcherEvent {
+  projectPath: string
+  parentPath: string
+  name: string
+  isDirectory: boolean
+}
+
+export const watcherAddListener = (callback: (data: WatcherEvent) => void) => {
+  return window.electronAPI.on('watcher-add', callback)
+}
+
+export const watcherUnlinkListener = (callback: (data: WatcherEvent) => void) => {
+  return window.electronAPI.on('watcher-unlink', callback)
+}
+
+export const watcherAddDirListener = (callback: (data: WatcherEvent) => void) => {
+  return window.electronAPI.on('watcher-addDir', callback)
+}
+
+export const watcherUnlinkDirListener = (callback: (data: WatcherEvent) => void) => {
+  return window.electronAPI.on('watcher-unlinkDir', callback)
+}
+
+// 跨端持久化 API（SQLite）- Electron IPC 模式存根
+export interface PersistedState {
+  projects: Array<{ id: string; name: string; path: string; order?: number; createdAt?: string; lastAccessedAt?: string }>
+  terminals: Array<{ id: string; name: string; cwd: string; taskSlug?: string; history?: HistoryEntry[]; createdAt?: string; lastActiveAt?: string }>
+  editors: Array<{ projectId: string; id: string; path: string; name: string; scrollToLine?: number }>
+}
+
+export const getFullState = (): Promise<PersistedState> =>
+  window.electronAPI.invoke<PersistedState>('get-full-state')
+
+export const updateFullState = (state: Partial<PersistedState>) =>
+  window.electronAPI.invoke('update-full-state', state)
+
+export const persistTerminal = (id: string, name: string, cwd: string, taskSlug?: string) =>
+  window.electronAPI.invoke('persist-terminal', id, name, cwd, taskSlug)
+
+export const updatePersistedTerminal = (id: string, updates: { name?: string; cwd?: string; taskSlug?: string; history?: HistoryEntry[] }) =>
+  window.electronAPI.invoke('update-persisted-terminal', id, updates)
+
+export const removePersistedTerminal = (id: string) =>
+  window.electronAPI.invoke('remove-persisted-terminal', id)
+
+export const updateEditors = (editors: { projectId: string; id: string; path: string; name: string; scrollToLine?: number }[]) =>
+  window.electronAPI.invoke('update-editors', editors)
+
+export const removeEditor = (projectId: string, id: string) =>
+  window.electronAPI.invoke('remove-editor', projectId, id)
