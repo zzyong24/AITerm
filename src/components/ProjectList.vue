@@ -283,9 +283,6 @@ export default defineComponent({
 
     window.addEventListener('click', this.closeContextMenu)
     window.addEventListener('click', this.handleOutsideClick)
-
-    // 加载保存的搜索历史
-    this.loadSearchHistory()
   },
 
   beforeUnmount() {

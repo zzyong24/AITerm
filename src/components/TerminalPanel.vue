@@ -131,6 +131,7 @@ export default defineComponent({
 
     this.tickTimer = setInterval(() => {
       this.tick++
+      this.$forceUpdate()
     }, 1000)
   },
   beforeUnmount() {
