@@ -7,7 +7,11 @@
       class="activity-row"
     >
       <div class="activity-header">
-        <div class="activity-name">{{ session.projectName || '终端' }}</div>
+        <div class="activity-name">
+          {{ session.projectName || '终端' }}
+          <span v-if="waitingMap[session.id]" class="attention-badge waiting" :title="waitingMap[session.id]">需介入</span>
+          <span v-else-if="failedMap[session.id]" class="attention-badge failed" :title="'退出码: ' + failedMap[session.id]">失败</span>
+        </div>
         <div class="activity-last">{{ getActivityLast(session.id) }}</div>
       </div>
       <div class="activity-bar-container">
@@ -39,7 +43,10 @@ export default defineComponent({
       tick: 0,
       tickTimer: null as ReturnType<typeof setInterval> | null,
       // 记录每个项目的第一个 sessionId
-      firstSessionMap: {} as Record<string, string>
+      firstSessionMap: {} as Record<string, string>,
+      // 需要人工干预的会话
+      waitingMap: {} as Record<string, string>,
+      failedMap: {} as Record<string, number>
     }
   },
 
@@ -47,6 +54,8 @@ export default defineComponent({
     // 订阅事件
     eventBus.on(AppEvents.SESSIONS_CHANGE, this.handleSessionsChange)
     eventBus.on(AppEvents.ACTIVITY_CHANGE, this.handleActivityChange)
+    eventBus.on(AppEvents.SESSION_WAITING, this.handleSessionWaiting)
+    eventBus.on(AppEvents.SESSION_FAILED, this.handleSessionFailed)
 
     // 初始化数据
     this.sessions = [...appBusiness.sessions]
@@ -65,6 +74,8 @@ export default defineComponent({
     }
     eventBus.off(AppEvents.SESSIONS_CHANGE, this.handleSessionsChange)
     eventBus.off(AppEvents.ACTIVITY_CHANGE, this.handleActivityChange)
+    eventBus.off(AppEvents.SESSION_WAITING, this.handleSessionWaiting)
+    eventBus.off(AppEvents.SESSION_FAILED, this.handleSessionFailed)
   },
 
   methods: {
@@ -86,6 +97,15 @@ export default defineComponent({
     },
     handleActivityChange(sessionId: string, data: { last: number; bytes: number }) {
       this.activityData[sessionId] = data
+    },
+    handleSessionWaiting(sessionId: string, reason: string) {
+      this.waitingMap[sessionId] = reason
+      // 触发响应式更新
+      this.$forceUpdate()
+    },
+    handleSessionFailed(sessionId: string, exitCode: number) {
+      this.failedMap[sessionId] = exitCode
+      this.$forceUpdate()
     },
 
     getActivityWidth(sessionId: string): number {
@@ -180,6 +200,31 @@ export default defineComponent({
 
 .activity-bar.bar-dead {
   background: #f48771;
+}
+
+.attention-badge {
+  display: inline-block;
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  margin-left: 6px;
+  font-weight: bold;
+  animation: pulse-badge 1.5s infinite;
+}
+
+.attention-badge.waiting {
+  background: #e67700;
+  color: #fff;
+}
+
+.attention-badge.failed {
+  background: #c0392b;
+  color: #fff;
+}
+
+@keyframes pulse-badge {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
 }
 
 .activity-bytes {
