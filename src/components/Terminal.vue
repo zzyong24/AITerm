@@ -54,9 +54,56 @@ import { defineComponent } from 'vue'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
+import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
 import { terminalOutputListener, terminalClosedListener, writeToTerminal, resizeTerminal } from '../api'
 import { appBusiness, AppEvents } from '../store/AppBusiness'
+
+// 检测终端输出是否包含需要人工干预的模式
+const WAITING_PATTERNS = [
+  { pattern: /\[Y\/n\]/i, reason: '等待确认' },
+  { pattern: /\[y\/N\]/i, reason: '等待确认' },
+  { pattern: /Press any key/i, reason: '等待按键' },
+  { pattern: /Press Enter/i, reason: '等待回车' },
+  { pattern: /password.*:/i, reason: '等待密码' },
+  { pattern: /Password:/i, reason: '等待密码' },
+  { pattern: /\?\s*\[Y\/n\]/i, reason: '等待确认' },
+  { pattern: /Selection:/i, reason: '等待选择' },
+  { pattern: /Choose.*option/i, reason: '等待选择' },
+  { pattern: /Enter your choice/i, reason: '等待选择' },
+  { pattern: /Retry\/Ignore/i, reason: '等待选择' },
+  { pattern: /abort\/retry\/fail/i, reason: '等待选择' },
+]
+const FAILED_PATTERNS = [
+  { pattern: /\+\d+ lines? \(ctrl\+o to expand\)/i, reason: '输出截断' },
+  { pattern: /\berror\b|\bfailed\b|\bfatal\b/i, reason: '命令失败' },
+  { pattern: /command not found/i, reason: '命令未找到' },
+  { pattern: /permission denied/i, reason: '权限不足' },
+  { pattern: /no such file/i, reason: '文件不存在' },
+]
+
+// 命令提示符正则：行首出现常见 prompt 符号，说明上一条命令跑完了
+const PROMPT_PATTERNS = [
+  /^[❯›▶]\s*/m,
+  /^>\s*/m,
+  /^\$\s*/m,
+  /^#\s*/m,
+  /^%(?!\s)/m,           // zsh 默认提示符 %
+]
+
+function detectWaitingOrFailed(text: string): { type: 'waiting' | 'failed'; reason: string } | null {
+  for (const { pattern, reason } of WAITING_PATTERNS) {
+    if (pattern.test(text)) return { type: 'waiting', reason }
+  }
+  for (const { pattern, reason } of FAILED_PATTERNS) {
+    if (pattern.test(text)) return { type: 'failed', reason }
+  }
+  return null
+}
+
+function detectPrompt(text: string): boolean {
+  return PROMPT_PATTERNS.some(p => p.test(text))
+}
 import { eventBus } from '../utils/EventBus'
 
 export default defineComponent({
@@ -100,6 +147,7 @@ export default defineComponent({
       id: this.sessionId,
       terminal: null as XTerm | null,
       fitAddon: null as FitAddon | null,
+      webglAddon: null as WebglAddon | null,
       outputUnsubscribe: null as (() => void) | null,
       closedUnsubscribe: null as (() => void) | null,
       resizeObserver: null as ResizeObserver | null,
@@ -110,7 +158,10 @@ export default defineComponent({
         x: 0,
         y: 0,
         selectedText: ''
-      }
+      },
+      detectedWaiting: false,
+      hasOutputSinceInput: false, // 用户输入后是否有新输出
+      hasCommandOutput: false     // 用户输入后是否有实质命令输出（区分 Claude UI 内的 ❯ 和真正的 prompt）
     }
   },
 
@@ -162,6 +213,25 @@ export default defineComponent({
             })
             // 活跃度跟踪
             appBusiness.addActivity(this.id, data.data.length)
+            // 检测是否需要人工干预（交互式等待或命令失败）
+            if (!this.detectedWaiting) {
+              const detected = detectWaitingOrFailed(text)
+              if (detected) {
+                this.detectedWaiting = true
+                if (detected.type === 'waiting') {
+                  appBusiness.addWaitingForInput(this.id, detected.reason)
+                }
+              }
+            }
+            // 检测命令提示符：用户输入后有新输出，且出现 prompt，说明上一条跑完了
+            if (!this.detectedWaiting && this.hasOutputSinceInput && detectPrompt(text)) {
+              appBusiness.addWaitingForInput(this.id, '等待下一条指令')
+              this.detectedWaiting = true
+              this.hasOutputSinceInput = false
+            } else if (!this.detectedWaiting) {
+              // 标记有新输出（只有在还没提醒时才标记）
+              this.hasOutputSinceInput = true
+            }
           }
         })
         // 通知后端调整大小
@@ -224,6 +294,11 @@ export default defineComponent({
       this.closedUnsubscribe = null
     }
 
+    if (this.webglAddon) {
+      this.webglAddon.dispose()
+      this.webglAddon = null
+    }
+
     if (this.terminal) {
       try {
         this.terminal.dispose()
@@ -273,6 +348,10 @@ export default defineComponent({
       })
       this.terminal.loadAddon(webLinksAddon)
 
+      // 使用 WebGL 渲染器提升滚动性能
+      this.webglAddon = new WebglAddon()
+      this.terminal.loadAddon(this.webglAddon)
+
       const container = this.$refs.terminalContainer as HTMLElement
       if (container) {
         this.terminal.open(container)
@@ -286,6 +365,14 @@ export default defineComponent({
             content: data,
             timestamp: Date.now()
           })
+          // 用户输入后清除干预提醒
+          if (this.detectedWaiting) {
+            this.detectedWaiting = false
+            appBusiness.clearWaitingForInput(this.id)
+          }
+          // 用户输入后重置：等下一条 prompt 才再提醒
+          this.hasOutputSinceInput = false
+          this.hasCommandOutput = false
         })
 
         this.terminal.onResize(({ cols, rows }) => {
@@ -312,6 +399,25 @@ export default defineComponent({
             })
             // 活跃度跟踪
             appBusiness.addActivity(this.id, data.data.length)
+            // 检测是否需要人工干预（交互式等待或命令失败）
+            if (!this.detectedWaiting) {
+              const detected = detectWaitingOrFailed(text)
+              if (detected) {
+                this.detectedWaiting = true
+                if (detected.type === 'waiting') {
+                  appBusiness.addWaitingForInput(this.id, detected.reason)
+                }
+              }
+            }
+            // 检测命令提示符：用户输入后有新输出，且出现 prompt，说明上一条跑完了
+            if (!this.detectedWaiting && this.hasOutputSinceInput && detectPrompt(text)) {
+              appBusiness.addWaitingForInput(this.id, '等待下一条指令')
+              this.detectedWaiting = true
+              this.hasOutputSinceInput = false
+            } else if (!this.detectedWaiting) {
+              // 标记有新输出（只有在还没提醒时才标记）
+              this.hasOutputSinceInput = true
+            }
           }
         })
 

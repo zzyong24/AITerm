@@ -1,5 +1,10 @@
 import { app, BrowserWindow, ipcMain, Menu, dialog, shell } from 'electron'
+import express from 'express'
+import cors from 'cors'
 import { join } from 'path'
+import { existsSync } from 'fs'
+
+const WEB_PORT = 5003
 
 // 日志
 let log: any = null
@@ -9,6 +14,7 @@ let ptyService: any = null
 let projectService: any = null
 let fileService: any = null
 let gitService: any = null
+let dbService: any = null
 
 let mainWindow: BrowserWindow | null = null
 
@@ -27,15 +33,24 @@ async function loadServices() {
   const { PtyService } = await dynamicImport(join(servicesPath, 'PtyService.mjs'))
   const { ProjectService } = await dynamicImport(join(servicesPath, 'ProjectService.mjs'))
   const { FileService } = await dynamicImport(join(servicesPath, 'FileService.mjs'))
+  const { DatabaseService, getDatabaseService } = await dynamicImport(join(servicesPath, 'DatabaseService.mjs'))
   const { GitService } = await import('../shared/services/GitService')
 
   ptyService = new PtyService()
   projectService = new ProjectService()
   fileService = new FileService()
   gitService = new GitService()
+  dbService = getDatabaseService()
 
   // 设置 GitService 日志处理器
   gitService.setLogger((msg: string) => log.info(msg))
+
+  // 设置 FileService watcher 回调，转发事件到渲染进程
+  fileService.setWatcherCallback((type: string, data: any) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(`watcher-${type}`, data)
+    }
+  })
 
   // 终端事件转发到渲染进程
   ptyService.on('output', (data: any) => {
@@ -124,6 +139,8 @@ function createWindow() {
 
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
+  } else if (embeddedServer) {
+    mainWindow.loadURL(`http://localhost:${WEB_PORT}`)
   } else {
     mainWindow.loadFile(join(__dirname, '../../dist/index.html'))
   }
@@ -133,6 +150,10 @@ function createWindow() {
   })
 
   log.info('Main window created')
+
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+    log.error('Failed to load:', errorCode, errorDescription)
+  })
 }
 
 // 注册 IPC handlers
@@ -262,6 +283,23 @@ function registerIpcHandlers() {
     return fileService.isGitIgnored(path)
   })
 
+  // 文件监听相关
+  ipcMain.handle('start-watcher', async (_, projectPath: string, rootPath: string) => {
+    fileService.startWatcher(projectPath, rootPath)
+  })
+
+  ipcMain.handle('stop-watcher', async (_, projectPath: string) => {
+    fileService.stopWatcher(projectPath)
+  })
+
+  ipcMain.handle('stop-all-watchers', async () => {
+    fileService.stopAllWatchers()
+  })
+
+  ipcMain.handle('get-watcher-info', async () => {
+    return fileService.getWatcherInfo()
+  })
+
   // 搜索相关
   ipcMain.handle('search-in-directory', async (_, dirPath: string, query: string) => {
     return await fileService.searchInDirectory(dirPath, query)
@@ -320,6 +358,75 @@ function registerIpcHandlers() {
     return await gitService.discardChanges(repoPath, filePath)
   })
 
+  // 跨端持久化 API（SQLite）
+  ipcMain.handle('get-full-state', async () => {
+    return dbService.getFullState()
+  })
+
+  ipcMain.handle('update-full-state', async (_, state: any) => {
+    const { projects, terminals, editors } = state
+
+    // 更新 projects
+    if (projects && Array.isArray(projects)) {
+      for (const p of projects) {
+        const existing = dbService.getProject(p.id)
+        if (existing) {
+          const stmt = dbService.db.prepare('UPDATE projects SET name = ?, path = ?, "order" = ? WHERE id = ?')
+          stmt.run(p.name, p.path, p.order || 0, p.id)
+        } else {
+          dbService.addProject(p.id, p.name, p.path, p.order || 0)
+        }
+      }
+    }
+
+    // 更新 terminals
+    if (terminals && Array.isArray(terminals)) {
+      for (const t of terminals) {
+        const existing = dbService.getTerminal(t.id)
+        if (existing) {
+          dbService.updateTerminal(t.id, t)
+        } else {
+          dbService.addTerminal(t.id, t.name, t.cwd, t.taskSlug || null)
+        }
+      }
+    }
+
+    // 更新 editors
+    if (editors && Array.isArray(editors)) {
+      for (const e of editors) {
+        dbService.saveEditor(e.projectId, e.id, e.path, e.name, e.scrollToLine)
+      }
+    }
+
+    return { success: true }
+  })
+
+  ipcMain.handle('persist-terminal', async (_, id: string, name: string, cwd: string, taskSlug?: string) => {
+    return dbService.addTerminal(id, name, cwd, taskSlug)
+  })
+
+  ipcMain.handle('update-persisted-terminal', async (_, id: string, updates: any) => {
+    dbService.updateTerminal(id, updates)
+    return { success: true }
+  })
+
+  ipcMain.handle('remove-persisted-terminal', async (_, id: string) => {
+    dbService.removeTerminal(id)
+    return { success: true }
+  })
+
+  ipcMain.handle('update-editors', async (_, editors: any[]) => {
+    for (const e of editors) {
+      dbService.saveEditor(e.projectId, e.id, e.path, e.name, e.scrollToLine)
+    }
+    return { success: true }
+  })
+
+  ipcMain.handle('remove-editor', async (_, projectId: string, id: string) => {
+    dbService.removeEditor(projectId, id)
+    return { success: true }
+  })
+
   // 窗口控制
   ipcMain.handle('window-minimize', () => {
     mainWindow?.minimize()
@@ -365,8 +472,71 @@ function registerIpcHandlers() {
   log.info('IPC handlers registered')
 }
 
+// 内嵌 Web 服务器
+let embeddedServer: any = null
+let wss: any = null
+
+function startEmbeddedServer() {
+  return new Promise((resolve, reject) => {
+    const distPath = app.isPackaged
+      ? join(process.resourcesPath, 'app.asar.unpacked', 'dist')
+      : join(__dirname, '../dist')
+
+    const indexPath = join(distPath, 'index.html')
+
+    if (!existsSync(indexPath)) {
+      console.warn('[EmbeddedServer] dist/index.html not found, skipping web server')
+      log.warn('[EmbeddedServer] indexPath checked:', indexPath, 'exists:', existsSync(indexPath))
+      resolve(null)
+      return
+    }
+
+    log.info('[EmbeddedServer] Serving files from:', distPath)
+
+    const expressApp = express()
+    expressApp.use(cors())
+
+    // 提供静态文件
+    expressApp.use(express.static(distPath))
+
+    // SPA fallback
+    expressApp.get('*', (req, res) => {
+      res.sendFile(indexPath)
+    })
+
+    embeddedServer = expressApp.listen(WEB_PORT, () => {
+      console.log(`[EmbeddedServer] Running on http://localhost:${WEB_PORT}`)
+      resolve(embeddedServer)
+    })
+
+    embeddedServer.on('error', (err: any) => {
+      if (err.code === 'EADDRINUSE') {
+        console.warn(`[EmbeddedServer] Port ${WEB_PORT} already in use, skipping web server`)
+        resolve(null)
+      } else {
+        reject(err)
+      }
+    })
+  })
+}
+
+function stopEmbeddedServer() {
+  return new Promise((resolve) => {
+    if (embeddedServer) {
+      embeddedServer.close(() => {
+        console.log('[EmbeddedServer] Stopped')
+        embeddedServer = null
+        resolve(null)
+      })
+    } else {
+      resolve(null)
+    }
+  })
+}
+
 app.whenReady().then(async () => {
   await loadServices()
+  await startEmbeddedServer()
   registerIpcHandlers()
   createWindow()
 
@@ -388,9 +558,10 @@ app.on('before-quit', async (e) => {
   e.preventDefault()
   try {
     await ptyService?.closeAll()
+    await stopEmbeddedServer()
   } catch (err) {
-    log?.error('Error closing PTY service:', err)
+    log?.error('Error closing services:', err)
   }
-  log?.info('All PTY sessions closed, proceeding with quit')
+  log?.info('All services closed, proceeding with quit')
   app.exit(0)
 })

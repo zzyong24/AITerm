@@ -3,6 +3,7 @@ import cors from 'cors'
 import { PtyService } from './services/PtyService.mjs'
 import { ProjectService } from './services/ProjectService.mjs'
 import { FileService } from './services/FileService.mjs'
+import { DatabaseService, getDatabaseService } from './services/DatabaseService.mjs'
 // 使用统一的 shared GitService（编译后从 dist-electron/shared 导入）
 import { GitService } from '../dist-electron/shared/services/GitService.js'
 
@@ -17,6 +18,7 @@ const ptyService = new PtyService()
 const projectService = new ProjectService()
 const fileService = new FileService()
 const gitService = new GitService()
+const dbService = getDatabaseService()
 
 // 终端相关 API
 app.post('/api/terminals', async (req, res) => {
@@ -24,6 +26,26 @@ app.post('/api/terminals', async (req, res) => {
     const { projectId, projectName, workingDir } = req.body
     const sessionId = await ptyService.createSession(projectId, projectName, workingDir)
     res.json({ sessionId })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// 终端重命名 API（供 Agent 调用）
+app.post('/api/terminals/:id/rename', (req, res) => {
+  try {
+    const { id } = req.params
+    const { name } = req.body
+    // 验证名称：只允许中文、英文、-、_
+    const validName = String(name).replace(/[^\w\u4e00-\u9fa5\-_]/g, '')
+    // 通过 WebSocket 广播重命名事件
+    const message = JSON.stringify({ type: 'terminal-renamed', sessionId: id, name: validName })
+    wss.clients.forEach((client) => {
+      if (client.readyState === 1) {
+        client.send(message)
+      }
+    })
+    res.json({ success: true, name: validName })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
@@ -220,6 +242,88 @@ app.post('/api/kill-port', async (req, res) => {
   }
 })
 
+app.post('/api/save-terminal-history', async (req, res) => {
+  try {
+    const { projectPath, workingDir, entries } = req.body
+    fileService.saveTerminalHistory(projectPath, workingDir, entries)
+    res.json({ success: true })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.get('/api/load-terminal-history', async (req, res) => {
+  try {
+    const { projectPath, workingDir } = req.query
+    const entries = fileService.loadTerminalHistory(projectPath, workingDir)
+    res.json(entries)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.post('/api/clear-terminal-history', async (req, res) => {
+  try {
+    const { projectPath, workingDir } = req.body
+    fileService.clearTerminalHistory(projectPath, workingDir)
+    res.json({ success: true })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// 终端列表保存/恢复
+app.post('/api/save-terminals', async (req, res) => {
+  try {
+    const { projectPath, terminals } = req.body
+    fileService.saveTerminals(projectPath, terminals)
+    res.json({ success: true })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.get('/api/load-terminals', async (req, res) => {
+  try {
+    const { projectPath } = req.query
+    const terminals = fileService.loadTerminals(projectPath)
+    res.json(terminals)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.delete('/api/terminals', async (req, res) => {
+  try {
+    const { projectPath } = req.body
+    fileService.clearTerminals(projectPath)
+    res.json({ success: true })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// 编辑器列表保存/恢复
+app.post('/api/save-editors', async (req, res) => {
+  try {
+    const { projectPath, editors } = req.body
+    fileService.saveEditors(projectPath, editors)
+    res.json({ success: true })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.get('/api/load-editors', async (req, res) => {
+  try {
+    const { projectPath } = req.query
+    const editors = fileService.loadEditors(projectPath)
+    res.json(editors)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
 app.post('/api/is-git-ignored', async (req, res) => {
   try {
     const { path } = req.body
@@ -371,6 +475,119 @@ app.post('/api/git-discard-changes', async (req, res) => {
     const { repoPath, filePath } = req.body
     const result = await gitService.discardChanges(repoPath, filePath)
     res.json(result)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// ============ 跨端持久化 API（SQLite） ============
+
+// GET /state — 获取完整状态
+app.get('/api/state', (req, res) => {
+  try {
+    const state = dbService.getFullState()
+    res.json(state)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// PUT /state — 批量更新状态
+app.put('/api/state', (req, res) => {
+  try {
+    const { projects, terminals, editors } = req.body
+    // 更新 projects
+    if (projects && Array.isArray(projects)) {
+      for (const p of projects) {
+        const existing = dbService.getProject(p.id)
+        if (existing) {
+          // 更新已有项目
+          const stmt = dbService.db.prepare('UPDATE projects SET name = ?, path = ?, "order" = ? WHERE id = ?')
+          stmt.run(p.name, p.path, p.order || 0, p.id)
+        } else {
+          // 新增项目
+          dbService.addProject(p.id, p.name, p.path, p.order || 0)
+        }
+      }
+    }
+    // 更新 terminals
+    if (terminals && Array.isArray(terminals)) {
+      for (const t of terminals) {
+        const existing = dbService.getTerminal(t.id)
+        if (existing) {
+          dbService.updateTerminal(t.id, t)
+        } else {
+          dbService.addTerminal(t.id, t.name, t.cwd, t.taskSlug || null, t.projectId || null)
+        }
+      }
+    }
+    // 更新 editors
+    if (editors && Array.isArray(editors)) {
+      for (const e of editors) {
+        dbService.saveEditor(e.projectId, e.id, e.path, e.name, e.scrollToLine)
+      }
+    }
+    res.json({ success: true })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// POST /terminals — 创建 terminal（仅持久化，不创建 PTY 会话）
+app.post('/api/persist/terminals', (req, res) => {
+  try {
+    const { id, name, cwd, taskSlug, projectId } = req.body
+    const terminal = dbService.addTerminal(id, name, cwd, taskSlug, projectId)
+    res.json(terminal)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// PUT /terminals/:id — 更新 terminal
+app.put('/api/terminals/:id', (req, res) => {
+  try {
+    const { id } = req.params
+    const updates = req.body
+    dbService.updateTerminal(id, updates)
+    res.json({ success: true })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// DELETE /terminals/:id — 删除 terminal（仅持久化）
+app.delete('/api/persist/terminals/:id', (req, res) => {
+  try {
+    const { id } = req.params
+    dbService.removeTerminal(id)
+    res.json({ success: true })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// PUT /editors — 更新 editors（批量 upsert）
+app.put('/api/editors', (req, res) => {
+  try {
+    const { projectId, editors } = req.body
+    if (Array.isArray(editors)) {
+      for (const e of editors) {
+        dbService.saveEditor(projectId || e.projectId, e.id, e.path, e.name, e.scrollToLine)
+      }
+    }
+    res.json({ success: true })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// DELETE /editors/:projectId/:id — 删除编辑器
+app.delete('/api/editors/:projectId/:id', (req, res) => {
+  try {
+    const { projectId, id } = req.params
+    dbService.removeEditor(projectId, id)
+    res.json({ success: true })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }

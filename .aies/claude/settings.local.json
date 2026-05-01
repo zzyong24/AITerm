@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npm rebuild *)",
+      "Bash(npx electron-rebuild *)",
+      "Bash(npm run *)",
+      "WebFetch(domain:marketplace.visualstudio.com)",
+      "Bash(pkill -f \"node server/index.mjs\")",
+      "Bash(pkill -f \"vite\")",
+      "Bash(npm test *)",
+      "Bash(node *)",
+      "Bash(awk '{print $2}')",
+      "Bash(xargs -r kill -9)",
+      "Bash(npm list *)",
+      "Bash(npx playwright *)",
+      "Bash(sqlite3 *)",
+      "Bash(lsof -ti:5002)",
+      "Bash(xargs kill *)",
+      "Bash(lsof -ti:5173)",
+      "Bash(lsof -ti:5174)",
+      "Bash(lsof -ti:5001,5002,5173)"
+    ]
+  }
+}

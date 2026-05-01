@@ -1,0 +1,4 @@
+{"phase": "implement", "spec": "architecture.md", "reason": "理解分层约束"}
+{"phase": "implement", "spec": "code-style.md", "reason": "命名和格式规范"}
+{"phase": "check", "spec": "quality-gates.md", "reason": "质量门自检"}
+{"phase": "check", "spec": "error-handling.md", "reason": "错误处理规范"}

@@ -9,12 +9,6 @@
             <path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z" />
           </svg>
         </button>
-        <button class="panel-tab" :class="{ active: activeTab === 'search' }" @click="activeTab = 'search'" title="搜索">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="11" cy="11" r="8" />
-            <path d="M21 21l-4.35-4.35" />
-          </svg>
-        </button>
         <div class="panel-tabs-spacer"></div>
         <button class="btn-settings" @click="handleToggleSettings" title="设置">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -70,7 +64,7 @@
                 <!-- 目录树 -->
                 <div v-if="expandedId === project.id" class="project-tree-container">
                   <DirectoryTree :root-path="project.path" @node-click="handleTreeNodeClick"
-                    @open-editor="handleOpenEditor" @search-in-directory="handleSearchInDirectory"
+                    @open-editor="handleOpenEditor"
                     @refresh="handleRefreshDirectory" />
                 </div>
               </div>
@@ -79,92 +73,6 @@
         </div>
       </div>
 
-      <!-- 搜索面板 -->
-      <div v-show="activeTab === 'search'" class="panel-content">
-        <div class="search-header">
-          <span class="search-title">搜索</span>
-        </div>
-        <div class="search-input-container">
-          <div class="search-row">
-            <input v-model="searchQuery" type="text" class="search-input" placeholder="搜索文件内容..." ref="searchInputRef"
-              @keydown.enter="handleSearch" @keydown.up.prevent="navigateHistory(-1)"
-              @keydown.down.prevent="navigateHistory(1)" @keydown.escape="hideHistoryDropdown"
-              @focus="showHistoryDropdown = true" @input="handleSearchInput" />
-          </div>
-          <!-- 历史搜索下拉 -->
-          <div v-if="showHistoryDropdown && searchHistory.length > 0" class="search-history-dropdown">
-            <div v-for="(item, idx) in filteredHistory" :key="idx" class="search-history-item"
-              :class="{ selected: idx === selectedHistoryIndex }" @click="selectHistoryItem(item)">
-              {{ item }}
-            </div>
-          </div>
-          <div class="search-row">
-            <input v-model="searchExtensions" type="text" class="search-extensions-input"
-              placeholder="扩展名: *.ts,*.js,*.vue 或留空搜索全部" />
-          </div>
-          <div class="search-row">
-            <span class="search-label">目录:</span>
-            <span class="search-path">{{ searchPath || '全部项目' }}</span>
-            <button class="btn-small" @click="showPathPicker = !showPathPicker">选择</button>
-            <div v-if="showPathPicker" class="path-picker">
-              <div class="path-picker-item" @click="selectSearchPath('')">全部项目</div>
-              <div v-for="project in projects" :key="project.id" class="path-picker-item"
-                @click="selectSearchPath(project.path)">
-                {{ project.name }}
-              </div>
-            </div>
-          </div>
-          <div class="search-options">
-            <label class="search-option">
-              <input type="checkbox" v-model="searchOptions.caseSensitive" />
-              区分大小写
-            </label>
-            <label class="search-option">
-              <input type="checkbox" v-model="searchOptions.wholeWord" />
-              全字匹配
-            </label>
-            <label class="search-option">
-              <input type="checkbox" v-model="searchOptions.regex" />
-              正则
-            </label>
-            <label class="search-option">
-              <input type="checkbox" v-model="searchOptions.regex" />
-              使用正则
-            </label>
-          </div>
-        </div>
-        <div class="search-results">
-          <div v-if="searching" class="search-empty">
-            搜索中...
-          </div>
-          <div v-else-if="searchQuery && searchResults.length === 0" class="search-empty">
-            未找到匹配结果
-          </div>
-          <div v-if="hasMoreSearchResults" class="search-warning">
-            结果过多，仅显示前 50 个文件。请使用更具体的搜索词缩小范围。
-          </div>
-          <div v-for="{ file, results } in limitedGroupedResults" :key="file" class="search-file-group">
-            <div class="search-file-header" @click="toggleFileExpand(file)">
-              <span class="expand-icon">{{ expandedFiles.includes(file) ? '▼' : '▶' }}</span>
-              <span class="search-result-file">{{ file }}</span>
-              <span class="search-result-count">{{ results.length }} 个匹配</span>
-            </div>
-            <div v-if="expandedFiles.includes(file)" class="search-file-matches">
-              <div v-for="(result, idx) in results" :key="idx" class="search-match-item"
-                @click="handleSearchResultClick(result)">
-                <span class="match-line">{{ result.line }}</span>
-                <span class="match-preview" @mouseenter="showPreviewTooltip($event, result)"
-                  @mouseleave="hidePreviewTooltip">
-                  {{ getMatchPreview(result) }}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 活跃度面板 -->
-      <ActivityPanel v-if="sessions.length > 0" />
 
       <!-- 右键菜单 -->
       <div v-if="contextMenu.visible" class="context-menu"
@@ -173,8 +81,6 @@
           <div class="context-menu-item" @click="handleLaunchTerminal">创建终端</div>
           <div class="context-menu-item" @click="handleLaunchBrowser">打开浏览器</div>
           <div class="context-menu-item" v-if="hasTerminalsToRestore" @click="handleRestoreTerminals">恢复终端</div>
-          <div class="context-menu-separator" />
-          <div class="context-menu-item" @click="handleSearchInDirectory">在目录中搜索</div>
           <div class="context-menu-separator" />
           <div class="context-menu-item" @click="handleOpenProjectCommitDialog">版本管理</div>
           <div class="context-menu-separator" />
@@ -195,7 +101,6 @@
         </template>
         <template v-else-if="contextMenu.type === 'directory'">
           <div class="context-menu-item" @click="handleOpenInNewTerminal">在此目录中打开终端</div>
-          <div class="context-menu-item" @click="handleSearchInDirectory">在目录中搜索</div>
           <div class="context-menu-separator" />
           <div class="context-menu-item" @click="handleCopyPath">复制路径</div>
           <div class="context-menu-item" @click="handlePasteFile">粘贴</div>
@@ -264,8 +169,6 @@ import {
   getGitRemote as apiGetGitRemote,
   getGitLastCommit as apiGetGitLastCommit,
   readFile as apiReadFile,
-  searchInDirectory as apiSearchInDirectory,
-  searchFileContent as apiSearchFileContent,
   openProjectInEditor as apiOpenProjectInEditor,
   gitStageAll as apiGitStageAll,
   gitStageFile as apiGitStageFile,
@@ -279,7 +182,6 @@ import {
 } from '../api'
 import { alert, confirm, prompt } from '../plugins/MessageBox'
 import DirectoryTree from './DirectoryTree.vue'
-import ActivityPanel from './ActivityPanel.vue'
 import GitCommitDialog, { type CommitFile } from './GitCommitDialog.vue'
 
 interface ContextMenuState {
@@ -296,7 +198,6 @@ export default defineComponent({
 
   components: {
     DirectoryTree,
-    ActivityPanel,
     GitCommitDialog
   },
 
@@ -333,23 +234,7 @@ export default defineComponent({
       hoveredProject: null as { path: string; x: number; y: number } | null,
       hoveredPreview: null as { content: string; x: number; y: number } | null,
       hasTerminalsToRestore: false,
-      activeTab: 'explorer' as 'explorer' | 'search',
-      searchQuery: '',
-      searchResults: [] as { file: string; path: string; line: number; preview: string }[],
-      searchPath: '',
-      searchExtensions: '',
-      showSearchOptions: false,
-      showPathPicker: false,
-      searching: false,
-      expandedFiles: [] as string[],
-      searchOptions: {
-        caseSensitive: false,
-        wholeWord: false,
-        regex: false
-      },
-      searchHistory: [] as string[],
-      selectedHistoryIndex: -1,
-      showHistoryDropdown: false,
+      activeTab: 'explorer' as 'explorer',
       // 版本管理弹窗
       commitDialog: {
         visible: false,
@@ -381,42 +266,6 @@ export default defineComponent({
         acc[group].push(p)
         return acc
       }, {})
-    },
-
-    filteredHistory(): string[] {
-      if (!this.searchQuery) {
-        // 搜索框为空时，显示所有历史记录
-        return this.searchHistory.slice(0, 10)
-      }
-      const query = this.searchQuery.toLowerCase()
-      return this.searchHistory.filter(h => h.toLowerCase().includes(query)).slice(0, 5)
-    },
-
-    groupedResults(): Record<string, { file: string; path: string; line: number; preview: string }[]> {
-      const grouped: Record<string, { file: string; path: string; line: number; preview: string }[]> = {}
-      for (const result of this.searchResults) {
-        if (!grouped[result.file]) {
-          grouped[result.file] = []
-        }
-        // 每个文件最多只显示10个结果
-        if (grouped[result.file].length < 10) {
-          grouped[result.file].push(result)
-        }
-      }
-      return grouped
-    },
-
-    limitedGroupedResults(): { file: string; results: { file: string; path: string; line: number; preview: string }[] }[] {
-      const entries = Object.entries(this.groupedResults)
-      const maxFiles = 50 // 最多显示50个文件
-      if (entries.length <= maxFiles) {
-        return entries.map(([file, results]) => ({ file, results }))
-      }
-      return entries.slice(0, maxFiles).map(([file, results]) => ({ file, results }))
-    },
-
-    hasMoreSearchResults(): boolean {
-      return Object.keys(this.groupedResults).length > 50
     }
   },
 
@@ -434,9 +283,6 @@ export default defineComponent({
 
     window.addEventListener('click', this.closeContextMenu)
     window.addEventListener('click', this.handleOutsideClick)
-
-    // 加载保存的搜索历史
-    this.loadSearchHistory()
   },
 
   beforeUnmount() {
@@ -855,10 +701,6 @@ export default defineComponent({
 
     handleOutsideClick(e: MouseEvent) {
       // 检查点击是否在搜索区域外
-      const searchPanel = this.$el.querySelector('.search-input-container')
-      if (searchPanel && !searchPanel.contains(e.target as Node)) {
-        this.hideHistoryDropdown()
-      }
     },
 
     showPathTooltip(e: MouseEvent, project: Project) {
@@ -878,211 +720,6 @@ export default defineComponent({
 
     handleTreeNodeClick(path: string) {
       console.log('Node clicked:', path)
-    },
-
-    handleSearchInput() {
-      // 只在用户手动输入时重置索引，导航时不重置
-      this.selectedHistoryIndex = -1
-      this.showHistoryDropdown = true
-    },
-
-    hideHistoryDropdown() {
-      this.showHistoryDropdown = false
-      this.selectedHistoryIndex = -1
-    },
-
-    navigateHistory(direction: number) {
-      const filtered = this.filteredHistory
-      if (filtered.length === 0) return
-
-      if (this.selectedHistoryIndex === -1) {
-        this.selectedHistoryIndex = direction > 0 ? 0 : filtered.length - 1
-      } else {
-        this.selectedHistoryIndex += direction
-        if (this.selectedHistoryIndex < 0) this.selectedHistoryIndex = filtered.length - 1
-        if (this.selectedHistoryIndex >= filtered.length) this.selectedHistoryIndex = 0
-      }
-
-      // 更新搜索框内容，但不触发输入事件
-      this.searchQuery = filtered[this.selectedHistoryIndex]
-    },
-
-    selectHistoryItem(item: string) {
-      this.searchQuery = item
-      this.selectedHistoryIndex = -1
-      this.showHistoryDropdown = false
-      this.handleSearch()
-    },
-
-    // 搜索历史持久化方法
-    loadSearchHistory() {
-      try {
-        const saved = localStorage.getItem('searchHistory')
-        if (saved) {
-          this.searchHistory = JSON.parse(saved)
-        }
-      } catch (e) {
-        console.error('Failed to load search history:', e)
-      }
-    },
-
-    saveSearchHistory() {
-      try {
-        localStorage.setItem('searchHistory', JSON.stringify(this.searchHistory))
-      } catch (e) {
-        console.error('Failed to save search history:', e)
-      }
-    },
-
-    handleSearch() {
-      const query = this.searchQuery.trim()
-      if (!query) {
-        this.searchResults = []
-        return
-      }
-
-      // 保存到历史记录
-      if (!this.searchHistory.includes(query)) {
-        this.searchHistory.unshift(query)
-        if (this.searchHistory.length > 10) {
-          this.searchHistory.pop()
-        }
-        // 持久化到 localStorage
-        this.saveSearchHistory()
-      }
-
-      // 确定搜索路径
-      let searchPath = this.searchPath
-      if (!searchPath && this.activeProjectId) {
-        const project = this.projects.find(p => p.id === this.activeProjectId)
-        if (project) {
-          searchPath = project.path
-        }
-      }
-
-      if (!searchPath) {
-        this.searchResults = []
-        return
-      }
-
-      // 解析扩展名（正则表达式）
-      const extensions = this.searchExtensions.trim() || '*.*'
-
-      this.searching = true
-      this.expandedFiles = []
-
-      // 执行文件内容搜索，限制返回结果数量避免界面卡顿
-      apiSearchFileContent(searchPath, query, 200, extensions)
-        .then(results => {
-          this.searchResults = results.map(r => ({
-            ...r
-          }))
-          this.searching = false
-          // 默认展开前5个文件
-          const files = Object.keys(this.groupedResults).slice(0, 5)
-          this.expandedFiles = files
-        })
-        .catch(e => {
-          console.error('Search failed:', e)
-          this.searchResults = []
-          this.searching = false
-        })
-    },
-
-    handleSearchResultClick(result: { file: string; path: string; line: number }) {
-      // 打开编辑器到对应文件
-      const project = this.projects.find(p => result.path.startsWith(p.path))
-      if (project) {
-        const projectId = project.id
-        const projectName = project.name
-        apiReadFile(result.path).then(content => {
-          this.$emit('open-editor', {
-            projectId,
-            projectName,
-            path: result.path,
-            content,
-            line: result.line
-          })
-        })
-      }
-    },
-
-    getMatchPreview(result: { file: string; path: string; line: number; preview?: string }): string {
-      if (!result.preview) {
-        return `第 ${result.line} 行`
-      }
-
-      let preview = result.preview.trim()
-      const query = this.searchQuery.trim()
-
-      // 如果preview包含多行，取中间那一行
-      const lines = preview.split('\n')
-      if (lines.length > 1) {
-        const middleIndex = Math.floor(lines.length / 2)
-        preview = lines[middleIndex].trim()
-      }
-
-      if (preview.length <= 30) {
-        return preview
-      }
-
-      // 如果有搜索查询，尝试围绕查询进行裁剪，突出显示重点
-      if (query) {
-        const lowerPreview = preview.toLowerCase()
-        const lowerQuery = query.toLowerCase()
-        const queryIndex = lowerPreview.indexOf(lowerQuery)
-
-        if (queryIndex !== -1) {
-          // 计算裁剪的起始位置，让查询内容尽量居中
-          const contextLength = 10 // 查询前后各保留多少字符
-          let start = Math.max(0, queryIndex - contextLength)
-          let end = Math.min(preview.length, queryIndex + query.length + contextLength)
-
-          let cropped = ''
-          if (start > 0) {
-            cropped += '...'
-          }
-          cropped += preview.substring(start, end)
-          if (end < preview.length) {
-            cropped += '...'
-          }
-
-          return cropped
-        }
-      }
-
-      // 默认裁剪方式：取前面部分
-      return preview.substring(0, 30) + '...'
-    },
-
-    selectSearchPath(path: string) {
-      this.searchPath = path
-      this.showPathPicker = false
-    },
-
-    toggleFileExpand(file: string) {
-      const idx = this.expandedFiles.indexOf(file)
-      if (idx >= 0) {
-        this.expandedFiles.splice(idx, 1)
-      } else {
-        this.expandedFiles.push(file)
-      }
-    },
-
-    handleSearchInDirectory(path?: string) {
-      // 可以从 DirectoryTree 传入特定路径
-      // 防止 event 对象被当作路径传入
-      if (typeof path === 'object' && path !== null && 'clientX' in path) {
-        path = undefined
-      }
-      const searchPath = path || this.contextMenu.path || this.contextMenu.project?.path
-      // 确保 searchPath 是有效的字符串路径
-      if (searchPath && typeof searchPath === 'string' && searchPath.length > 0 && !searchPath.startsWith('[object')) {
-        this.activeTab = 'search'
-        this.searchPath = searchPath
-        this.searchQuery = ''
-      }
-      this.closeContextMenu()
     },
 
     handleRefreshDirectory(dirPath: string) {

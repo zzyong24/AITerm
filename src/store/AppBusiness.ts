@@ -13,7 +13,20 @@ import {
   getTerminalFontSize as apiGetTerminalFontSize,
   setTerminalFontSize as apiSetTerminalFontSize,
   addProject as apiAddProject,
-  removeProject as apiRemoveProject
+  removeProject as apiRemoveProject,
+  saveTerminals as apiSaveTerminals,
+  loadTerminals as apiLoadTerminals,
+  saveEditors as apiSaveEditors,
+  loadEditors as apiLoadEditors,
+  readFile as apiReadFile,
+  getFullState,
+  updateFullState,
+  persistTerminal,
+  updatePersistedTerminal,
+  removePersistedTerminal,
+  updateEditors,
+  removeEditor,
+  PersistedState
 } from '../api'
 
 export interface Project {
@@ -39,6 +52,7 @@ export interface TerminalSession {
   projectId: string | null
   projectName: string | null
   workingDir: string
+  name: string
   alive: boolean
   lastActivity: number
   children: ChildTerminal[]
@@ -94,7 +108,9 @@ export const AppEvents = {
   ACTIVE_PROJECT_CHANGE: 'activeProjectChange',
   SETTINGS_CHANGE: 'settingsChange',
   ACTIVITY_CHANGE: 'activityChange',
-  INITIALIZED: 'initialized'
+  INITIALIZED: 'initialized',
+  SESSION_WAITING: 'sessionWaiting',
+  SESSION_FAILED: 'sessionFailed'
 } as const
 
 // 响应式业务类 - 数据驱动UI的核心
@@ -115,6 +131,10 @@ class AppBusinessClass {
 
   // 活跃度数据
   activityData: Record<string, { last: number; bytes: number }> = {}
+
+  // 需要人工干预的会话
+  waitingForInput: Record<string, string> = {} // sessionId -> 原因描述
+  failedSessions: Record<string, number> = {} // sessionId -> 退出码
 
   // ============ 事件通知 ============
   private notifyProjectsChange() {
@@ -160,13 +180,29 @@ class AppBusinessClass {
     eventBus.emit(AppEvents.ACTIVITY_CHANGE, sessionId, { ...data })
   }
 
-  private notifyInitialized() {
-    eventBus.emit(AppEvents.INITIALIZED, {
-      projects: [...this.projects],
-      homeDir: this.homeDir,
-      editorPath: this.editorPath,
-      terminalFontSize: this.terminalFontSize
-    })
+  private notifySessionWaiting(sessionId: string, reason: string) {
+    eventBus.emit(AppEvents.SESSION_WAITING, sessionId, reason)
+  }
+
+  private notifySessionFailed(sessionId: string, exitCode: number) {
+    eventBus.emit(AppEvents.SESSION_FAILED, sessionId, exitCode)
+  }
+
+  addWaitingForInput(sessionId: string, reason: string) {
+    this.waitingForInput[sessionId] = reason
+    this.notifySessionWaiting(sessionId, reason)
+  }
+
+  clearWaitingForInput(sessionId: string) {
+    if (this.waitingForInput[sessionId]) {
+      delete this.waitingForInput[sessionId]
+      this.notifySessionsChange()
+    }
+  }
+
+  setSessionFailed(sessionId: string, exitCode: number) {
+    this.failedSessions[sessionId] = exitCode
+    this.notifySessionFailed(sessionId, exitCode)
   }
 
   addActivity(sessionId: string, bytes: number) {
@@ -176,6 +212,15 @@ class AppBusinessClass {
       bytes: bytes
     }
     this.notifyActivityChange(sessionId, this.activityData[sessionId])
+  }
+
+  private notifyInitialized() {
+    eventBus.emit(AppEvents.INITIALIZED, {
+      projects: [...this.projects],
+      homeDir: this.homeDir,
+      editorPath: this.editorPath,
+      terminalFontSize: this.terminalFontSize
+    })
   }
 
   setEditorPath(path: string) {
@@ -201,6 +246,14 @@ class AppBusinessClass {
     const project = await apiAddProject(name, path, group)
     this.projects.push(project)
     this.notifyProjectsChange()
+    // 同步到 SQLite
+    try {
+      await updateFullState({
+        projects: [{ id: project.id, name: project.name, path: project.path, order: 0 }]
+      })
+    } catch (e) {
+      console.error('[AppBusiness] Failed to sync project to SQLite:', e)
+    }
     return project
   }
 
@@ -213,6 +266,13 @@ class AppBusinessClass {
     await apiRemoveProject(id)
     this.projects = this.projects.filter(p => p.id !== id)
     this.notifyProjectsChange()
+    // 从 SQLite 中移除项目（软删除：更新 lastAccessedAt 不再包含该 ID）
+    try {
+      // 通过批量更新移除项目 - 在下次 sync 时会排除
+      this.scheduleSyncProjectsToSQLite()
+    } catch (e) {
+      console.error('[AppBusiness] Failed to sync project removal to SQLite:', e)
+    }
   }
 
   async refreshProjects(): Promise<void> {
@@ -291,18 +351,69 @@ class AppBusinessClass {
   async initialize() {
     try {
       console.log('[AppBusiness] Starting initialization...')
-      const [projects, homeDir, editorPath, terminalFontSize] = await Promise.all([
-        apiGetProjects(),
-        apiGetHomeDir(),
-        apiGetEditorPath(),
-        apiGetTerminalFontSize()
-      ])
-      console.log('[AppBusiness] API results:', { projects: projects.length, homeDir, editorPath, terminalFontSize })
-      this.projects = projects
-      this.homeDir = homeDir
-      this.editorPath = editorPath || ''
-      this.terminalFontSize = terminalFontSize || 14
-      console.log('[AppBusiness] After assignment, terminalFontSize:', this.terminalFontSize)
+
+      // Step 1: 尝试从 SQLite 获取跨端持久化状态
+      let loadedFromSQLite = false
+      try {
+        const fullState = await getFullState()
+        if (fullState.projects && fullState.projects.length > 0) {
+          console.log('[AppBusiness] Loading state from SQLite...')
+          this.projects = fullState.projects.map(p => ({
+            id: p.id,
+            name: p.name,
+            path: p.path,
+            group: undefined,
+            git: undefined
+          }))
+
+          // 从 SQLite 恢复 terminals 和 editors
+          if (fullState.terminals && fullState.terminals.length > 0) {
+            // 只恢复 sessionId，actual PTY session 在 restoreAllTerminals 中创建
+          }
+
+          loadedFromSQLite = true
+          console.log('[AppBusiness] Loaded from SQLite:', { projects: this.projects.length })
+        }
+      } catch (e) {
+        console.log('[AppBusiness] SQLite load failed, using individual APIs:', e)
+      }
+
+      // Step 2: 如果没有从 SQLite 加载，使用原有 API 获取数据
+      if (!loadedFromSQLite) {
+        const [projects, homeDir, editorPath, terminalFontSize] = await Promise.all([
+          apiGetProjects(),
+          apiGetHomeDir(),
+          apiGetEditorPath(),
+          apiGetTerminalFontSize()
+        ])
+        console.log('[AppBusiness] API results:', { projects: projects.length, homeDir, editorPath, terminalFontSize })
+        this.projects = projects
+        this.homeDir = homeDir
+        this.editorPath = editorPath || ''
+        this.terminalFontSize = terminalFontSize || 14
+      } else {
+        // 从 SQLite 加载时也要获取基础设置
+        const [homeDir, editorPath, terminalFontSize] = await Promise.all([
+          apiGetHomeDir(),
+          apiGetEditorPath(),
+          apiGetTerminalFontSize()
+        ])
+        this.homeDir = homeDir
+        this.editorPath = editorPath || ''
+        this.terminalFontSize = terminalFontSize || 14
+      }
+
+      // Step 3: 自动恢复所有项目的终端
+      await this.restoreAllTerminals()
+
+      // Step 4: 自动恢复所有项目的编辑器
+      await this.restoreAllEditors()
+
+      // Step 5: 同步状态到 SQLite（如果从 API 加载的）
+      if (!loadedFromSQLite && this.projects.length > 0) {
+        this.syncStateToSQLite()
+      }
+
       this.notifyInitialized()
       this.notifyProjectsChange()
       this.notifySettingsChange()
@@ -342,6 +453,68 @@ class AppBusinessClass {
     }
   }
 
+  // 同步状态到 SQLite
+  private async syncStateToSQLite() {
+    try {
+      const state: Partial<PersistedState> = {
+        projects: this.projects.map(p => ({
+          id: p.id,
+          name: p.name,
+          path: p.path,
+          order: 0
+        }))
+      }
+      await updateFullState(state)
+      console.log('[AppBusiness] State synced to SQLite')
+    } catch (e) {
+      console.error('[AppBusiness] Failed to sync state to SQLite:', e)
+    }
+  }
+
+  // 自动恢复所有项目的终端
+  async restoreAllTerminals() {
+    for (const project of this.projects) {
+      try {
+        const terminals = await apiLoadTerminals(project.path)
+        if (terminals.length > 0) {
+          console.log('[AppBusiness] Auto-restoring terminals for project:', project.name)
+          for (const terminal of terminals) {
+            const sessionId = await this.launchTerminal(project.id, project.name, terminal.workingDir)
+            if (terminal.name && terminal.name !== project.name) {
+              this.renameSession(sessionId, terminal.name)
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[AppBusiness] Failed to restore terminals for project:', project.name, e)
+      }
+    }
+  }
+
+  // 自动恢复所有项目的编辑器
+  async restoreAllEditors() {
+    for (const project of this.projects) {
+      try {
+        const editors = await apiLoadEditors(project.path)
+        if (editors.length > 0) {
+          console.log('[AppBusiness] Auto-restoring editors for project:', project.name)
+          for (const editor of editors) {
+            let content = ''
+            try {
+              const fileContent = await apiReadFile(editor.path)
+              content = fileContent || ''
+            } catch (e) {
+              console.warn('[Editors] Failed to read file:', editor.path, e)
+            }
+            this.openEditor(project.id, project.name, editor.path, content, editor.scrollToLine)
+          }
+        }
+      } catch (e) {
+        console.warn('[AppBusiness] Failed to restore editors for project:', project.name, e)
+      }
+    }
+  }
+
   // ============ 终端会话 ============
   async createSession(projectId: string | null, projectName: string | null, workingDir?: string): Promise<string> {
     const sessionId = await apiCreateTerminalSession(projectId, projectName, workingDir)
@@ -350,6 +523,7 @@ class AppBusinessClass {
       projectId,
       projectName,
       workingDir: workingDir || '~',
+      name: projectName || '终端',
       alive: true,
       lastActivity: 0,
       children: [],
@@ -361,8 +535,32 @@ class AppBusinessClass {
     return sessionId
   }
 
+  renameSession(sessionId: string, name: string) {
+    const session = this.sessions.find(s => s.id === sessionId)
+    if (!session) return
+    // 验证：只允许中文、英文、-、_
+    const validName = name.replace(/[^\w\u4e00-\u9fa5\-_]/g, '')
+    session.name = validName
+    // 同时更新 tab 中的名称
+    this.tabs = this.tabs.map(tab => ({
+      ...tab,
+      items: tab.items.map(item =>
+        item.id === sessionId ? { ...item, name: validName } : item
+      )
+    }))
+    this.notifySessionsChange()
+    this.notifyTabsChange()
+    // 保存
+    if (session.projectId) {
+      this.scheduleSaveTerminals(session.projectId)
+    }
+  }
+
   async closeSession(sessionId: string) {
     console.log('[AppBusiness] closeSession: starting', { sessionId })
+    // 先保存项目 ID，关闭后需要更新持久化
+    const session = this.sessions.find(s => s.id === sessionId)
+    const projectId = session?.projectId
     // 调用 API 关闭后端终端
     try {
       await apiCloseTerminalSession(sessionId)
@@ -389,10 +587,16 @@ class AppBusinessClass {
 
     // 清理活跃度数据，防止内存泄漏
     delete this.activityData[sessionId]
+    delete this.waitingForInput[sessionId]
+    delete this.failedSessions[sessionId]
 
     // 通知更新
     this.notifySessionsChange()
     this.notifyTabsChange()
+    // 更新持久化
+    if (projectId) {
+      this.scheduleSaveTerminals(projectId)
+    }
   }
 
   // ============ 启动终端（创建Tab和Session） ============
@@ -432,16 +636,227 @@ class AppBusinessClass {
     this.activeProjectId = projectId
     this.notifyActiveProjectChange(projectId)
     this.notifyTabsChange()
+    // 延迟保存
+    this.scheduleSaveTerminals(projectId)
     return sessionId
   }
 
-  // ============ 终端列表保存/恢复 (已禁用) ============
-  async saveProjectTerminals(_projectId: string): Promise<void> {
-    // 禁用：不再保存终端列表
+  // ============ 终端列表保存/恢复 ============
+  private saveTimer: ReturnType<typeof setTimeout> | null = null
+
+  private scheduleSaveTerminals(projectId: string) {
+    // 防抖：500ms 内只保存一次
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer)
+    }
+    this.saveTimer = setTimeout(() => {
+      this.saveProjectTerminals(projectId)
+    }, 500)
   }
 
-  async loadProjectTerminals(_projectId: string): Promise<void> {
-    // 禁用：不再加载终端列表
+  async saveProjectTerminals(projectId: string): Promise<void> {
+    const project = this.projects.find(p => p.id === projectId)
+    if (!project) return
+
+    const projectSessions = this.sessions.filter(s => s.projectId === projectId)
+    const terminals = projectSessions.map(s => ({
+      id: s.id,
+      name: s.name,
+      workingDir: s.workingDir,
+      children: s.children,
+      activeSubId: s.activeSubId
+    }))
+
+    try {
+      await apiSaveTerminals(project.path, terminals)
+      console.log('[Terminals] Saved terminals for project:', project.name, terminals)
+    } catch (e) {
+      console.error('[Terminals] Failed to save terminals:', e)
+    }
+    // 同步到 SQLite
+    this.scheduleSyncTerminalsToSQLite()
+  }
+
+  // ============ 编辑器列表保存/恢复 ============
+  private saveEditorsTimer: ReturnType<typeof setTimeout> | null = null
+
+  private scheduleSaveEditors(projectId: string) {
+    if (this.saveEditorsTimer) {
+      clearTimeout(this.saveEditorsTimer)
+    }
+    this.saveEditorsTimer = setTimeout(() => {
+      this.saveProjectEditors(projectId)
+    }, 500)
+  }
+
+  async saveProjectEditors(projectId: string): Promise<void> {
+    const project = this.projects.find(p => p.id === projectId)
+    if (!project) return
+
+    const projectEditors = this.editors.filter(e => e.projectId === projectId)
+    const editors = projectEditors.map(e => ({
+      id: e.id,
+      path: e.path,
+      name: e.name,
+      scrollToLine: e.scrollToLine
+    }))
+
+    try {
+      await apiSaveEditors(project.path, editors)
+      console.log('[Editors] Saved editors for project:', project.name, editors)
+    } catch (e) {
+      console.error('[Editors] Failed to save editors:', e)
+    }
+    // 同步到 SQLite
+    this.scheduleSyncEditorsToSQLite(projectId)
+  }
+
+  // ============ SQLite 跨端持久化同步 ============
+  private syncProjectsTimer: ReturnType<typeof setTimeout> | null = null
+  private syncEditorsTimer: ReturnType<typeof setTimeout> | null = null
+
+  private scheduleSyncProjectsToSQLite() {
+    if (this.syncProjectsTimer) {
+      clearTimeout(this.syncProjectsTimer)
+    }
+    this.syncProjectsTimer = setTimeout(() => {
+      this.syncProjectsToSQLite()
+    }, 1000)
+  }
+
+  private async syncProjectsToSQLite() {
+    try {
+      await updateFullState({
+        projects: this.projects.map(p => ({
+          id: p.id,
+          name: p.name,
+          path: p.path,
+          order: 0
+        }))
+      })
+      console.log('[AppBusiness] Synced projects to SQLite')
+    } catch (e) {
+      console.error('[AppBusiness] Failed to sync projects to SQLite:', e)
+    }
+  }
+
+  private scheduleSyncEditorsToSQLite(projectId: string) {
+    if (this.syncEditorsTimer) {
+      clearTimeout(this.syncEditorsTimer)
+    }
+    this.syncEditorsTimer = setTimeout(() => {
+      this.syncEditorsToSQLite(projectId)
+    }, 1000)
+  }
+
+  private async syncEditorsToSQLite(projectId: string) {
+    try {
+      const projectEditors = this.editors.filter(e => e.projectId === projectId)
+      const editors = projectEditors.map(e => ({
+        projectId: e.projectId || '',
+        id: e.id,
+        path: e.path,
+        name: e.name,
+        scrollToLine: e.scrollToLine
+      }))
+      await updateEditors(editors)
+      console.log('[AppBusiness] Synced editors to SQLite for project:', projectId)
+    } catch (e) {
+      console.error('[AppBusiness] Failed to sync editors to SQLite:', e)
+    }
+  }
+
+  private syncTerminalsTimer: ReturnType<typeof setTimeout> | null = null
+
+  private scheduleSyncTerminalsToSQLite() {
+    if (this.syncTerminalsTimer) {
+      clearTimeout(this.syncTerminalsTimer)
+    }
+    this.syncTerminalsTimer = setTimeout(() => {
+      this.syncTerminalsToSQLite()
+    }, 1000)
+  }
+
+  private async syncTerminalsToSQLite() {
+    try {
+      const terminals = this.sessions.map(s => ({
+        id: s.id,
+        projectId: s.projectId,
+        name: s.name,
+        cwd: s.workingDir,
+        taskSlug: undefined,
+        history: []
+      }))
+      // 使用批量更新 API
+      await updateFullState({ terminals })
+      console.log('[AppBusiness] Synced terminals to SQLite')
+    } catch (e) {
+      console.error('[AppBusiness] Failed to sync terminals to SQLite:', e)
+    }
+  }
+
+  // ============ 编辑器恢复相关 ============
+
+  async loadProjectEditors(projectId: string): Promise<void> {
+    const project = this.projects.find(p => p.id === projectId)
+    if (!project) return
+
+    try {
+      const editors = await apiLoadEditors(project.path)
+      console.log('[Editors] Loaded editors for project:', project.name, editors)
+
+      if (editors.length === 0) return
+
+      // 关闭现有编辑器
+      const existingEditors = this.editors.filter(e => e.projectId === projectId)
+      for (const editor of existingEditors) {
+        this.closeEditor(editor.id)
+      }
+
+      // 恢复编辑器
+      for (const editor of editors) {
+        // 读取文件内容
+        let content = ''
+        try {
+          const fileContent = await apiReadFile(editor.path)
+          content = fileContent || ''
+        } catch (e) {
+          console.warn('[Editors] Failed to read file:', editor.path, e)
+        }
+        this.openEditor(projectId, project.name, editor.path, content, editor.scrollToLine)
+      }
+    } catch (e) {
+      console.error('[Editors] Failed to load editors:', e)
+    }
+  }
+
+  async loadProjectTerminals(projectId: string): Promise<void> {
+    const project = this.projects.find(p => p.id === projectId)
+    if (!project) return
+
+    try {
+      const terminals = await apiLoadTerminals(project.path)
+      console.log('[Terminals] Loaded terminals for project:', project.name, terminals)
+
+      if (terminals.length === 0) return
+
+      // 先关闭现有的项目终端（用户要恢复保存的列表）
+      const existingSessions = this.sessions.filter(s => s.projectId === projectId)
+      for (const session of existingSessions) {
+        await this.closeSession(session.id)
+      }
+
+      // 为每个终端创建会话
+      for (const terminal of terminals) {
+        const sessionId = await this.launchTerminal(projectId, project.name, terminal.workingDir)
+        // 恢复名称
+        if (terminal.name && terminal.name !== project.name) {
+          this.renameSession(sessionId, terminal.name)
+        }
+      }
+    } catch (e) {
+      console.error('[Terminals] Failed to load terminals:', e)
+    }
   }
 
   // ============ 编辑器 ============
@@ -503,11 +918,18 @@ class AppBusinessClass {
     this.activeProjectId = projectId
     this.notifyActiveProjectChange(projectId)
     this.notifyTabsChange()
+    // 保存编辑器列表
+    if (projectId) {
+      this.scheduleSaveEditors(projectId)
+    }
 
     return id
   }
 
   closeEditor(editorId: string) {
+    // 保存 projectId 用于后续更新持久化
+    const editor = this.editors.find(e => e.id === editorId)
+    const projectId = editor?.projectId
     // 从 tabs 中移除
     this.tabs = this.tabs.map(tab => {
       const newItems = tab.items.filter(i => i.id !== editorId)
@@ -529,6 +951,10 @@ class AppBusinessClass {
     }
     this.notifyEditorsChange()
     this.notifyTabsChange()
+    // 更新持久化
+    if (projectId) {
+      this.scheduleSaveEditors(projectId)
+    }
   }
 
   // ============ 浏览器 ============
@@ -643,11 +1069,33 @@ class AppBusinessClass {
 
   // ============ 选择/激活 ============
   selectItem(itemId: string, type: 'terminal' | 'editor') {
+    // Find which project owns this item
+    let targetProjectId = this.activeProjectId
+    if (type === 'terminal') {
+      const session = this.sessions.find(s => s.id === itemId)
+      if (session?.projectId) {
+        targetProjectId = session.projectId
+      }
+    } else {
+      const editor = this.editors.find(e => e.id === itemId)
+      if (editor?.projectId) {
+        targetProjectId = editor.projectId
+      }
+    }
+
+    // Switch project if needed (update both activeProjectId and tabs atomically)
+    if (targetProjectId !== this.activeProjectId) {
+      this.activeProjectId = targetProjectId
+      this.notifyActiveProjectChange(targetProjectId)
+    }
+
+    // Update the target project's tab to select the item
     this.tabs = this.tabs.map(tab => {
-      if (tab.projectId !== this.activeProjectId) return tab
+      if (tab.projectId !== targetProjectId) return tab
       return { ...tab, activeItemId: itemId }
     })
     this.notifyTabsChange()
+
     if (type === 'terminal') {
       this.activeIndex = this.sessions.findIndex(s => s.id === itemId)
     } else {

@@ -1,5 +1,5 @@
-const API_BASE = 'http://localhost:5001/api'
-const WS_BASE = 'ws://localhost:5002'
+const API_BASE = `http://${window.location.hostname}:5001/api`
+const WS_BASE = `ws://${window.location.hostname}:5002`
 
 export interface Project {
   id: string
@@ -45,6 +45,7 @@ export interface TerminalSession {
   projectId: string | null
   projectName: string | null
   workingDir: string
+  name: string
   alive: boolean
   lastActivity: number
   children: ChildTerminal[]
@@ -296,6 +297,119 @@ export const windowSetFullscreen = (_flag: boolean) => Promise.resolve()
 export const windowIsFullscreen = () => Promise.resolve(false)
 export const windowToggleFullscreen = () => Promise.resolve()
 export const getOpenTerminalsCount = () => Promise.resolve(0)
+
+// 文件监听（stub for HTTP mode）
+export const startWatcher = () => Promise.resolve()
+export const stopWatcher = () => Promise.resolve()
+export const stopAllWatchers = () => Promise.resolve()
+export const getWatcherInfo = () => Promise.resolve([])
+export const watcherAddListener = () => () => {}
+export const watcherUnlinkListener = () => () => {}
+export const watcherAddDirListener = () => () => {}
+export const watcherUnlinkDirListener = () => () => {}
+
+// 终端历史 (浏览器模式下使用HTTP API)
+export interface HistoryEntry {
+  type: 'input' | 'output'
+  content: string
+  timestamp: number
+}
+
+export const saveTerminalHistory = (projectPath: string, workingDir: string, entries: HistoryEntry[]) =>
+  apiCall('/save-terminal-history', {
+    method: 'POST',
+    body: JSON.stringify({ projectPath, workingDir, entries }),
+  })
+
+export const loadTerminalHistory = (projectPath: string, workingDir: string): Promise<HistoryEntry[]> =>
+  apiCall<HistoryEntry[]>('/load-terminal-history?projectPath=' + encodeURIComponent(projectPath) + '&workingDir=' + encodeURIComponent(workingDir))
+
+export const clearTerminalHistory = (projectPath: string, workingDir: string) =>
+  apiCall('/clear-terminal-history', {
+    method: 'POST',
+    body: JSON.stringify({ projectPath, workingDir }),
+  })
+
+// 终端重命名（供 Agent 调用）
+export const renameTerminal = (sessionId: string, name: string) =>
+  apiCall<{ success: boolean; name: string }>('/terminals/' + sessionId + '/rename', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  })
+
+// 终端列表保存/恢复
+export const saveTerminals = (projectPath: string, terminals: { id: string; name: string; workingDir: string; children?: any[]; activeSubId?: string | null }[]) =>
+  apiCall('/save-terminals', {
+    method: 'POST',
+    body: JSON.stringify({ projectPath, terminals }),
+  })
+
+export const loadTerminals = (projectPath: string): Promise<{ id: string; name: string; workingDir: string; children?: any[]; activeSubId?: string | null }[]> =>
+  apiCall<{ id: string; name: string; workingDir: string; children?: any[]; activeSubId?: string | null }[]>('/load-terminals?projectPath=' + encodeURIComponent(projectPath))
+
+export const clearTerminals = (projectPath: string) =>
+  apiCall('/terminals', {
+    method: 'DELETE',
+    body: JSON.stringify({ projectPath }),
+  })
+
+// 编辑器列表保存/恢复
+export const saveEditors = (projectPath: string, editors: { id: string; path: string; name: string; scrollToLine?: number }[]) =>
+  apiCall('/save-editors', {
+    method: 'POST',
+    body: JSON.stringify({ projectPath, editors }),
+  })
+
+export const loadEditors = (projectPath: string): Promise<{ id: string; path: string; name: string; scrollToLine?: number }[]> =>
+  apiCall<{ id: string; path: string; name: string; scrollToLine?: number }[]>('/load-editors?projectPath=' + encodeURIComponent(projectPath))
+
+// ============ 跨端持久化 API（SQLite） ============
+
+export interface PersistedState {
+  projects: Array<{ id: string; name: string; path: string; order?: number; createdAt?: string; lastAccessedAt?: string }>
+  terminals: Array<{ id: string; name: string; cwd: string; taskSlug?: string; history?: HistoryEntry[]; createdAt?: string; lastActiveAt?: string }>
+  editors: Array<{ projectId: string; id: string; path: string; name: string; scrollToLine?: number }>
+}
+
+// 获取完整状态
+export const getFullState = (): Promise<PersistedState> =>
+  apiCall<PersistedState>('/state')
+
+// 批量更新状态
+export const updateFullState = (state: Partial<PersistedState>) =>
+  apiCall('/state', {
+    method: 'PUT',
+    body: JSON.stringify(state),
+  })
+
+// 持久化终端（创建）
+export const persistTerminal = (id: string, name: string, cwd: string, taskSlug?: string) =>
+  apiCall('/persist/terminals', {
+    method: 'POST',
+    body: JSON.stringify({ id, name, cwd, taskSlug }),
+  })
+
+// 持久化终端（更新）
+export const updatePersistedTerminal = (id: string, updates: { name?: string; cwd?: string; taskSlug?: string; history?: HistoryEntry[] }) =>
+  apiCall('/terminals/' + id, {
+    method: 'PUT',
+    body: JSON.stringify(updates),
+  })
+
+// 持久化终端（删除）
+export const removePersistedTerminal = (id: string) =>
+  apiCall('/persist/terminals/' + id, { method: 'DELETE' })
+
+// 更新编辑器
+export const updateEditors = (editors: { projectId: string; id: string; path: string; name: string; scrollToLine?: number }[]) =>
+  apiCall('/editors', {
+    method: 'PUT',
+    body: JSON.stringify({ editors }),
+  })
+
+// 删除编辑器
+export const removeEditor = (projectId: string, id: string) =>
+  apiCall('/editors/' + projectId + '/' + id, { method: 'DELETE' })
 
 // WebSocket 连接
 type MessageHandler = (data: any) => void

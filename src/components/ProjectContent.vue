@@ -12,7 +12,17 @@
         <DesktopOutlined v-if="item.type === 'terminal'" class="tab-icon" />
         <FileTextOutlined v-else-if="item.type === 'editor'" class="tab-icon" />
         <GlobalOutlined v-else-if="item.type === 'browser'" class="tab-icon" />
-        <span>{{ item.name }}</span>
+        <input
+          v-if="editingTabId === item.id"
+          ref="renameInput"
+          v-model="editingName"
+          class="tab-name-input"
+          @blur="finishRename"
+          @keydown.enter="finishRename"
+          @keydown.escape="cancelRename"
+          @click.stop
+        />
+        <span v-else @dblclick.stop="startRename(item)">{{ item.name }}</span>
         <span v-if="item.modified" class="modified-dot">●</span>
         <button
           v-if="item.type === 'terminal'"
@@ -99,7 +109,11 @@ export default defineComponent({
       // 全局数据
       sessions: [] as TerminalSession[],
       editors: [] as EditorTab[],
-      browsers: [] as BrowserTab[]
+      browsers: [] as BrowserTab[],
+      // 重命名状态
+      editingTabId: null as string | null,
+      editingName: '',
+      renameInput: null as HTMLInputElement | null
     }
   },
 
@@ -200,6 +214,40 @@ export default defineComponent({
 
     handleCloseBrowser(browserId: string) {
       appBusiness.closeBrowser(browserId)
+    },
+
+    startRename(item: TabItem) {
+      if (item.type !== 'terminal') return
+      this.editingTabId = item.id
+      this.editingName = item.name
+      this.$nextTick(() => {
+        // ref 在 v-for 中是数组，需要找到当前编辑项的 input
+        const inputs = this.$refs.renameInput as HTMLInputElement[] | HTMLInputElement
+        if (Array.isArray(inputs)) {
+          const current = inputs.find((_: any, i: number) => this.items[i]?.id === item.id)
+          current?.focus()
+          current?.select()
+        } else if (inputs) {
+          inputs.focus()
+          inputs.select()
+        }
+      })
+    },
+
+    finishRename() {
+      if (this.editingTabId && this.editingName) {
+        const validName = this.editingName.replace(/[^\w\u4e00-\u9fa5\-_]/g, '')
+        if (validName) {
+          appBusiness.renameSession(this.editingTabId, validName)
+        }
+      }
+      this.editingTabId = null
+      this.editingName = ''
+    },
+
+    cancelRename() {
+      this.editingTabId = null
+      this.editingName = ''
     }
   }
 })
@@ -242,6 +290,24 @@ export default defineComponent({
   cursor: pointer;
   white-space: nowrap;
   font-size: 13px;
+  max-width: 140px;
+}
+
+.content-tab span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-name-input {
+  background: #3c3c3c;
+  border: 1px solid #007acc;
+  color: #d4d4d4;
+  font-size: 13px;
+  padding: 2px 4px;
+  border-radius: 2px;
+  width: 80px;
+  outline: none;
 }
 
 .content-tab:hover {

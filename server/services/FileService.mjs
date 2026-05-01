@@ -1,7 +1,8 @@
 import { homedir } from 'os'
 import { existsSync, readdirSync, statSync, unlinkSync, rmdirSync, copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
-import { join, basename } from 'path'
+import { join, basename, dirname } from 'path'
 import { execSync } from 'child_process'
+import chokidar from 'chokidar'
 
 export class FileService {
   getHomeDir() {
@@ -262,6 +263,39 @@ export class FileService {
     // 禁用：不再操作 .aiterm/terminals.json
   }
 
+  // ============ 编辑器列表保存/恢复 ============
+  getEditorsFilePath(projectPath) {
+    return join(this.getHistoryDir(projectPath), 'editors.json')
+  }
+
+  saveEditors(projectPath, editors) {
+    try {
+      const historyDir = this.getHistoryDir(projectPath)
+      if (!existsSync(historyDir)) {
+        mkdirSync(historyDir, { recursive: true })
+      }
+      const editorsFile = this.getEditorsFilePath(projectPath)
+      writeFileSync(editorsFile, JSON.stringify({ projectPath, editors }), 'utf-8')
+    } catch (e) {
+      console.error(`Failed to save editors:`, e)
+    }
+  }
+
+  loadEditors(projectPath) {
+    try {
+      const editorsFile = this.getEditorsFilePath(projectPath)
+      if (!existsSync(editorsFile)) {
+        return []
+      }
+      const content = readFileSync(editorsFile, 'utf-8')
+      const data = JSON.parse(content)
+      return data.editors || []
+    } catch (e) {
+      console.error(`Failed to load editors:`, e)
+      return []
+    }
+  }
+
   async readFile(filePath) {
     try {
       const content = readFileSync(filePath, 'utf-8')
@@ -436,5 +470,84 @@ export class FileService {
     } catch (e) {
       return { success: false, output: e.stdout || '', error: e.message }
     }
+  }
+
+  // ============ 文件监听 ============
+  // watchers: Map<projectPath, chokidar.Watcher>
+  watchers = new Map()
+
+  // 主进程回调（由 main.ts 设置）
+  watcherCallback = null
+
+  setWatcherCallback(cb) {
+    this.watcherCallback = cb
+  }
+
+  startWatcher(projectPath, rootPath) {
+    if (this.watchers.has(projectPath)) {
+      return
+    }
+    const watcher = chokidar.watch(rootPath, {
+      persistent: true,
+      ignoreInitial: true,
+      depth: 0, // 只监听直接子节点，不递归
+      ignored: ['**/.DS_Store'],
+      awaitWriteFinish: {
+        stabilityThreshold: 300,
+        pollInterval: 100
+      }
+    })
+
+    watcher.on('add', (filePath) => {
+      const parentPath = dirname(filePath)
+      const name = basename(filePath)
+      this.watcherCallback?.('add', { projectPath, parentPath, name, isDirectory: false })
+    })
+
+    watcher.on('unlink', (filePath) => {
+      const parentPath = dirname(filePath)
+      const name = basename(filePath)
+      this.watcherCallback?.('unlink', { projectPath, parentPath, name, isDirectory: false })
+    })
+
+    watcher.on('addDir', (dirPath) => {
+      const parentPath = dirname(dirPath)
+      const name = basename(dirPath)
+      this.watcherCallback?.('addDir', { projectPath, parentPath, name, isDirectory: true })
+    })
+
+    watcher.on('unlinkDir', (dirPath) => {
+      const parentPath = dirname(dirPath)
+      const name = basename(dirPath)
+      this.watcherCallback?.('unlinkDir', { projectPath, parentPath, name, isDirectory: true })
+    })
+
+    watcher.on('error', (err) => {
+      console.error(`Watcher error for ${projectPath}:`, err)
+    })
+
+    this.watchers.set(projectPath, watcher)
+    console.log(`Watcher started for: ${projectPath}`)
+  }
+
+  stopWatcher(projectPath) {
+    const watcher = this.watchers.get(projectPath)
+    if (watcher) {
+      watcher.close()
+      this.watchers.delete(projectPath)
+      console.log(`Watcher stopped for: ${projectPath}`)
+    }
+  }
+
+  stopAllWatchers() {
+    for (const [projectPath, watcher] of this.watchers) {
+      watcher.close()
+      console.log(`Watcher stopped for: ${projectPath}`)
+    }
+    this.watchers.clear()
+  }
+
+  getWatcherInfo() {
+    return Array.from(this.watchers.keys())
   }
 }

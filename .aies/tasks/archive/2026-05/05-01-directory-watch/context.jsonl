@@ -1,0 +1,4 @@
+{"phase": "implement", "spec": "architecture.md", "reason": "确认分层约束 - 必须在主进程服务层实现 watcher，不能污染 Vue 组件业务逻辑"}
+{"phase": "implement", "spec": "code-style.md", "reason": "命名和格式规范"}
+{"phase": "check", "spec": "quality-gates.md", "reason": "质量门自检"}
+{"phase": "check", "spec": "error-handling.md", "reason": "错误处理规范 - watcher 异常需优雅降级"}
