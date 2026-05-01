@@ -1,0 +1,16 @@
+{
+  "slug": "activity-bar",
+  "title": "Activity Bar + 可折叠侧边面板",
+  "status": "in_progress",
+  "priority": "P1",
+  "owner": "moonlitclear",
+  "confirmed": false,
+  "autopilot": false,
+  "created_at": "2026-05-01 21:00:00",
+  "updated_at": "2026-05-01 21:00:00",
+  "commit": "",
+  "parent": null,
+  "children": [],
+  "related_files": [],
+  "notes": ""
+}

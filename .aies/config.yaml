@@ -1,0 +1,86 @@
+# AIES 配置文件
+# 项目级设置，所有值都有合理默认值，按需覆盖
+
+# ============================================================
+# 会话日志
+# ============================================================
+
+# 单个 journal 文件最大行数，超过自动切换到下一个
+max_journal_lines: 2000
+
+# 自动提交日志变更的 commit message
+session_commit_message: "chore: record session journal"
+
+# 是否在会话结束时自动提交日志（false = 仅本地修改，由用户决定是否提交）
+auto_commit_journal: false
+
+# ============================================================
+# 任务生命周期 Hooks
+# ============================================================
+
+# 每个 hook 接收 TASK_JSON_PATH 环境变量，指向 task.json
+# Hook 失败仅打印警告，不阻塞主操作
+hooks: {}
+# 示例：
+# hooks:
+#   after_create:
+#     - "echo 'Task created'"
+#   after_finish:
+#     - |
+#       COMMIT=$(git rev-parse HEAD)
+#       jq ".commit=\"$COMMIT\"" "$TASK_JSON_PATH" > "$TASK_JSON_PATH.tmp"
+#       mv "$TASK_JSON_PATH.tmp" "$TASK_JSON_PATH"
+
+# ============================================================
+# 多开发者支持
+# ============================================================
+
+# 是否强制初始化开发者身份
+require_developer_init: true
+
+# 开发者身份文件位置（相对项目根目录，不应提交到 git）
+developer_file: ".aies/.developer"
+
+# ============================================================
+# 平台适配
+# ============================================================
+
+# 启用的 AI 平台
+# 可选：claude / cursor / codebuddy / copilot / codex / universal
+platforms:
+  - claude
+  - cursor
+  - codebuddy
+  - universal
+
+# ============================================================
+# Monorepo / 多包支持（可选）
+# ============================================================
+
+# 声明 monorepo 中的各个包，任务和 journal 可关联到具体包
+# path: 相对于项目根目录的路径
+# type: service / cli / lib / frontend / other
+# default: true 时 task.py create 不需要加 --package 参数
+# git: true 表示该包是独立 git 子模块（polyrepo 布局）
+packages: []
+# 示例（多服务 monorepo）：
+# packages:
+#   - path: agent-manage-backend
+#     type: service
+#     default: true
+#   - path: agent-server
+#     type: service
+#   - path: agent-knowledge-service
+#     type: service
+#   - path: o2-api-gateway
+#     type: service
+
+# ============================================================
+# 多 Agent 流水线（可选，默认关闭）
+# ============================================================
+
+multi_agent:
+  enabled: false
+  # 启用时，会在 .claude/agents/ 下生成 plan/implement/check/debug 等子 Agent
+  # 详见 docs/multi-agent-decision.md
+

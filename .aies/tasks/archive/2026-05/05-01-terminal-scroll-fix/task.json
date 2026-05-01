@@ -1,0 +1,16 @@
+{
+  "slug": "terminal-scroll-fix",
+  "title": "修复终端滚动卡顿",
+  "status": "completed",
+  "priority": "P2",
+  "owner": "moonlitclear",
+  "confirmed": false,
+  "autopilot": false,
+  "created_at": "2026-05-01 15:01:05",
+  "updated_at": "2026-05-01 20:09:47",
+  "commit": "",
+  "parent": null,
+  "children": [],
+  "related_files": [],
+  "notes": ""
+}

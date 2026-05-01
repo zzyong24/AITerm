@@ -14,6 +14,8 @@
     "build:win": "vite build && rm -rf dist-electron && tsc -p tsconfig.electron.json && electron-builder --win",
     "start": "node dist-server/index.js",
     "electron": "electron .",
+    "rebuild": "electron-rebuild",
+    "postinstall": "electron-rebuild",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -31,7 +33,10 @@
       "!server/**/*.ts"
     ],
     "asarUnpack": [
-      "dist/**/*"
+      "dist/**/*",
+      "node_modules/better-sqlite3/**/*",
+      "node_modules/node-pty/**/*",
+      "node_modules/@xterm/**/*"
     ],
     "mac": {
       "target": [
@@ -89,6 +94,7 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.0.4",
     "@playwright/test": "^1.59.1",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",

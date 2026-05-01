@@ -150,6 +150,10 @@ function createWindow() {
   })
 
   log.info('Main window created')
+
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+    log.error('Failed to load:', errorCode, errorDescription)
+  })
 }
 
 // 注册 IPC handlers
@@ -475,16 +479,19 @@ let wss: any = null
 function startEmbeddedServer() {
   return new Promise((resolve, reject) => {
     const distPath = app.isPackaged
-      ? join(process.resourcesPath, 'dist')
-      : join(__dirname, '../../dist')
+      ? join(process.resourcesPath, 'app.asar.unpacked', 'dist')
+      : join(__dirname, '../dist')
 
     const indexPath = join(distPath, 'index.html')
 
     if (!existsSync(indexPath)) {
       console.warn('[EmbeddedServer] dist/index.html not found, skipping web server')
+      log.warn('[EmbeddedServer] indexPath checked:', indexPath, 'exists:', existsSync(indexPath))
       resolve(null)
       return
     }
+
+    log.info('[EmbeddedServer] Serving files from:', distPath)
 
     const expressApp = express()
     expressApp.use(cors())
