@@ -85,7 +85,14 @@ import {
   gitStageFile as apiGitStageFile,
   gitCommit as apiGitCommit,
   gitPull as apiGitPull,
-  gitPush as apiGitPush
+  gitPush as apiGitPush,
+  startWatcher,
+  stopWatcher,
+  watcherAddListener,
+  watcherUnlinkListener,
+  watcherAddDirListener,
+  watcherUnlinkDirListener,
+  type WatcherEvent
 } from '../api'
 import { appBusiness } from '../store/AppBusiness'
 import { alert } from '../plugins/MessageBox'
@@ -101,6 +108,7 @@ interface TreeNode {
   gitRepo?: { isRepo: boolean; changesCount: number; ahead?: number; behind?: number }
   children?: TreeNode[]
   loading?: boolean
+  isLeaf?: boolean
 }
 
 export default defineComponent({
@@ -149,7 +157,9 @@ export default defineComponent({
         behind: 0,
         lastCommit: null as { hash: string; date: string; message: string } | null,
         tooManyFilesCount: 0
-      }
+      },
+      // 文件监听器引用
+      watcherCleanups: [] as (() => void)[]
     }
   },
 
@@ -157,13 +167,107 @@ export default defineComponent({
     this.loadTree()
 
     window.addEventListener('click', this.closeContextMenu)
+
+    // 启动文件监听
+    this.setupWatcher()
   },
 
   beforeUnmount() {
     window.removeEventListener('click', this.closeContextMenu)
+    this.cleanupWatcher()
   },
 
   methods: {
+    async setupWatcher() {
+      // 计算 projectPath（取 rootPath 的父目录作为 project 标识）
+      const projectPath = this.rootPath
+      try {
+        await startWatcher(projectPath, this.rootPath)
+
+        const cleanups = [
+          watcherAddListener((data) => this.handleWatcherEvent('add', data)),
+          watcherUnlinkListener((data) => this.handleWatcherEvent('unlink', data)),
+          watcherAddDirListener((data) => this.handleWatcherEvent('addDir', data)),
+          watcherUnlinkDirListener((data) => this.handleWatcherEvent('unlinkDir', data))
+        ]
+        this.watcherCleanups = cleanups
+      } catch (e) {
+        console.error('Failed to start watcher:', e)
+      }
+    },
+
+    cleanupWatcher() {
+      for (const cleanup of this.watcherCleanups) {
+        cleanup()
+      }
+      this.watcherCleanups = []
+      stopWatcher(this.rootPath).catch(() => {})
+    },
+
+    handleWatcherEvent(type: 'add' | 'unlink' | 'addDir' | 'unlinkDir', data: WatcherEvent) {
+      // 只处理属于本 rootPath 的事件
+      if (data.projectPath !== this.rootPath) return
+
+      // 找到变化目录对应的 treeNode
+      const parentNode = this.findTreeNodeByPath(this.treeData, data.parentPath)
+      if (!parentNode) return
+
+      // 若该目录未展开，忽略（下次展开自然加载最新）
+      if (!this.expandedKeys.includes(data.parentPath)) return
+
+      if (type === 'add' || type === 'addDir') {
+        // 检查是否已存在同名节点
+        const exists = parentNode.children?.some(c => c.title === data.name)
+        if (exists) return
+        // 插入新节点
+        this.insertNode(parentNode, data.name, data.isDirectory)
+      } else {
+        // 删除节点
+        this.removeNodeByName(parentNode, data.name)
+      }
+      this.treeData = [...this.treeData]
+    },
+
+    findTreeNodeByPath(tree: TreeNode[], path: string): TreeNode | null {
+      for (const node of tree) {
+        if (node.path === path) return node
+        if (node.children) {
+          const found = this.findTreeNodeByPath(node.children, path)
+          if (found) return found
+        }
+      }
+      return null
+    },
+
+    insertNode(parentNode: TreeNode, name: string, isDirectory: boolean) {
+      if (!parentNode.children) {
+        parentNode.children = []
+      }
+      const newNode: TreeNode = {
+        title: name,
+        key: `${parentNode.path}/${name}`,
+        path: `${parentNode.path}/${name}`,
+        isDirectory,
+        children: isDirectory ? [] : undefined,
+        isLeaf: !isDirectory
+      }
+      parentNode.children.push(newNode)
+      // 保持排序：目录在前
+      parentNode.children.sort((a, b) => {
+        if (a.isDirectory && !b.isDirectory) return -1
+        if (!a.isDirectory && b.isDirectory) return 1
+        return a.title.localeCompare(b.title)
+      })
+    },
+
+    removeNodeByName(parentNode: TreeNode, name: string) {
+      if (!parentNode.children) return
+      const idx = parentNode.children.findIndex(c => c.title === name)
+      if (idx >= 0) {
+        parentNode.children.splice(idx, 1)
+      }
+    },
+
     async loadTree() {
       this.loading = true
       try {
@@ -216,7 +320,7 @@ export default defineComponent({
       const expandedPath = e.node?.dataRef?.path
       if (expandedPath) {
         const node = this.findTreeNodeByPath(this.treeData, expandedPath)
-        if (node?.children?.length > 0) {
+        if (node && node.children && node.children.length > 0) {
           this.refreshChildrenGitStatus(node.children)
         }
       }
@@ -237,17 +341,6 @@ export default defineComponent({
         })
       )
       this.treeData = [...this.treeData]
-    },
-
-    findTreeNodeByPath(tree: TreeNode[], path: string): TreeNode | null {
-      for (const node of tree) {
-        if (node.path === path) return node
-        if (node.children) {
-          const found = this.findTreeNodeByPath(node.children, path)
-          if (found) return found
-        }
-      }
-      return null
     },
 
     onLoadData(treeNode: any) {
