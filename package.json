@@ -5,6 +5,8 @@
   "main": "dist-electron/electron/main.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:web": "npm run rebuild:web && concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:electron": "npm run rebuild:electron && electron .",
     "dev:frontend": "vite",
     "dev:backend": "node server/index.mjs",
     "build": "vite build && rm -rf dist-electron && tsc -p tsconfig.electron.json",
@@ -15,6 +17,8 @@
     "start": "node dist-server/index.js",
     "electron": "electron .",
     "rebuild": "electron-rebuild",
+    "rebuild:web": "npm rebuild better-sqlite3 node-pty",
+    "rebuild:electron": "electron-rebuild",
     "postinstall": "electron-rebuild",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -103,7 +107,7 @@
     "@vitejs/plugin-vue": "^5.2.1",
     "@vue/test-utils": "^2.4.6",
     "concurrently": "^9.1.2",
-    "electron": "^33.4.0",
+    "electron": "^35.0.0",
     "electron-builder": "^26.8.1",
     "jsdom": "^29.0.2",
     "typescript": "~5.7.3",

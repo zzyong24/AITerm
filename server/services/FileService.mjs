@@ -263,37 +263,19 @@ export class FileService {
     // 禁用：不再操作 .aiterm/terminals.json
   }
 
-  // ============ 编辑器列表保存/恢复 ============
-  getEditorsFilePath(projectPath) {
-    return join(this.getHistoryDir(projectPath), 'editors.json')
+  // ============ 编辑器列表保存/恢复 (已禁用) ============
+  getEditorsFilePath(_projectPath) {
+    // 禁用：不再操作 .aiterm 目录
+    return ''
   }
 
-  saveEditors(projectPath, editors) {
-    try {
-      const historyDir = this.getHistoryDir(projectPath)
-      if (!existsSync(historyDir)) {
-        mkdirSync(historyDir, { recursive: true })
-      }
-      const editorsFile = this.getEditorsFilePath(projectPath)
-      writeFileSync(editorsFile, JSON.stringify({ projectPath, editors }), 'utf-8')
-    } catch (e) {
-      console.error(`Failed to save editors:`, e)
-    }
+  saveEditors(_projectPath, _editors) {
+    // 禁用：不再保存编辑器列表到 .aiterm 目录
   }
 
-  loadEditors(projectPath) {
-    try {
-      const editorsFile = this.getEditorsFilePath(projectPath)
-      if (!existsSync(editorsFile)) {
-        return []
-      }
-      const content = readFileSync(editorsFile, 'utf-8')
-      const data = JSON.parse(content)
-      return data.editors || []
-    } catch (e) {
-      console.error(`Failed to load editors:`, e)
-      return []
-    }
+  loadEditors(_projectPath) {
+    // 禁用：不再从 .aiterm 目录加载编辑器列表
+    return []
   }
 
   async readFile(filePath) {
