@@ -4,7 +4,14 @@ import cors from 'cors'
 import { join } from 'path'
 import { existsSync } from 'fs'
 
-const WEB_PORT = 5003
+// 动态导入 ESM 模块（绕过 TypeScript CommonJS 编译限制）
+const dynamicImport = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+
+// 加载共享路由模块
+async function loadRoutesModule() {
+  const { registerRoutes } = await dynamicImport(join(app.getAppPath(), 'server/routes.mjs'))
+  return registerRoutes
+}
 
 // 日志
 let log: any = null
@@ -17,9 +24,6 @@ let gitService: any = null
 let dbService: any = null
 
 let mainWindow: BrowserWindow | null = null
-
-// 动态导入 ESM 模块（绕过 TypeScript CommonJS 编译限制）
-const dynamicImport = new Function('path', 'return import(path)') as (path: string) => Promise<any>
 
 // 加载服务
 async function loadServices() {
@@ -203,6 +207,9 @@ function registerIpcHandlers() {
 
   ipcMain.handle('remove-project', async (_, id: string) => {
     await projectService.removeProject(id)
+    // 级联删除：清除该项目下的所有终端和编辑器
+    dbService.deleteTerminalsByProject(id)
+    dbService.clearEditors(id)
   })
 
   ipcMain.handle('rename-project', async (_, id: string, newName: string) => {
@@ -277,6 +284,21 @@ function registerIpcHandlers() {
 
   ipcMain.handle('kill-port', async (_, port: number) => {
     return await fileService.killPort(port)
+  })
+
+  // 终端列表保存/恢复
+  ipcMain.handle('save-terminals', async (_, projectPath: string, terminals: any[]) => {
+    fileService.saveTerminals(projectPath, terminals)
+    return { success: true }
+  })
+
+  ipcMain.handle('load-terminals', async (_, projectPath: string) => {
+    return fileService.loadTerminals(projectPath)
+  })
+
+  ipcMain.handle('clear-terminals', async (_, projectPath: string) => {
+    fileService.clearTerminals(projectPath)
+    return { success: true }
   })
 
   ipcMain.handle('is-git-ignored', async (_, path: string) => {
@@ -366,27 +388,26 @@ function registerIpcHandlers() {
   ipcMain.handle('update-full-state', async (_, state: any) => {
     const { projects, terminals, editors } = state
 
-    // 更新 projects
+    // 更新 projects — 使用 updateProject 而非直接操作 db
     if (projects && Array.isArray(projects)) {
       for (const p of projects) {
         const existing = dbService.getProject(p.id)
         if (existing) {
-          const stmt = dbService.db.prepare('UPDATE projects SET name = ?, path = ?, "order" = ? WHERE id = ?')
-          stmt.run(p.name, p.path, p.order || 0, p.id)
+          dbService.updateProject(p.id, p.name, p.path, p.order || 0)
         } else {
           dbService.addProject(p.id, p.name, p.path, p.order || 0)
         }
       }
     }
 
-    // 更新 terminals
+    // 更新 terminals — 精确 upsert，不做 DELETE ALL
     if (terminals && Array.isArray(terminals)) {
       for (const t of terminals) {
         const existing = dbService.getTerminal(t.id)
         if (existing) {
-          dbService.updateTerminal(t.id, t)
+          dbService.updateTerminal(t.id, { name: t.name, cwd: t.cwd, projectId: t.projectId })
         } else {
-          dbService.addTerminal(t.id, t.name, t.cwd, t.taskSlug || null)
+          dbService.addTerminal(t.id, t.name, t.cwd || '', t.taskSlug || null, t.projectId || null)
         }
       }
     }
@@ -425,6 +446,15 @@ function registerIpcHandlers() {
   ipcMain.handle('remove-editor', async (_, projectId: string, id: string) => {
     dbService.removeEditor(projectId, id)
     return { success: true }
+  })
+
+  ipcMain.handle('load-editors', async (_, projectPath: string) => {
+    // 根据项目路径查找项目 ID，然后获取该项目的编辑器
+    const project = projectService.getProjects().find((p: { id: string; name: string; path: string }) => p.path === projectPath)
+    if (project) {
+      return dbService.getEditorsByProject(project.id)
+    }
+    return []
   })
 
   // 窗口控制
@@ -476,11 +506,14 @@ function registerIpcHandlers() {
 let embeddedServer: any = null
 let wss: any = null
 
-function startEmbeddedServer() {
-  return new Promise((resolve, reject) => {
+const WEB_PORT = 5003
+
+async function startEmbeddedServer() {
+  return new Promise(async (resolve, reject) => {
+    const appPath = app.getAppPath()
     const distPath = app.isPackaged
       ? join(process.resourcesPath, 'app.asar.unpacked', 'dist')
-      : join(__dirname, '../dist')
+      : join(appPath, 'dist')
 
     const indexPath = join(distPath, 'index.html')
 
@@ -496,6 +529,13 @@ function startEmbeddedServer() {
     const expressApp = express()
     expressApp.use(cors())
 
+    // 注册 API 路由（在静态文件之前）
+    const registerRoutes = await loadRoutesModule()
+    const { setHttpServer } = registerRoutes(expressApp, { ptyService, projectService, fileService, gitService, dbService }, {
+      port: WEB_PORT,
+      enableWs: true
+    })
+
     // 提供静态文件
     expressApp.use(express.static(distPath))
 
@@ -506,6 +546,8 @@ function startEmbeddedServer() {
 
     embeddedServer = expressApp.listen(WEB_PORT, () => {
       console.log(`[EmbeddedServer] Running on http://localhost:${WEB_PORT}`)
+      // Attach WS upgrade handler now that we have the HTTP server
+      setHttpServer(embeddedServer)
       resolve(embeddedServer)
     })
 

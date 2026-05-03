@@ -215,6 +215,11 @@ export const terminalActivityListener = (callback: (data: { session_id: string; 
   return window.electronAPI.on('terminal-activity', callback)
 }
 
+// 跨端状态同步（Electron IPC 模式下不需要，返回空的取消函数）
+export const stateChangedListener = (_callback: (data: { entity: string }) => void) => {
+  return () => { }  // No-op: Electron IPC mode has no cross-client sync via WebSocket
+}
+
 // WebSocket 类 (空的，因为在 Electron 中不需要)
 export const terminalWs = {
   connect: () => { },

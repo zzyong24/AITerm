@@ -6,6 +6,7 @@ import {
   terminalOutputListener,
   terminalClosedListener,
   terminalActivityListener,
+  stateChangedListener,
   getProjects as apiGetProjects,
   getHomeDir as apiGetHomeDir,
   getEditorPath as apiGetEditorPath,
@@ -414,6 +415,29 @@ class AppBusinessClass {
         this.syncStateToSQLite()
       }
 
+      // Step 6: 监听跨端 state_changed 事件，自动刷新本地状态
+      stateChangedListener(({ entity }) => {
+        console.log('[AppBusiness] Remote state_changed:', entity)
+        if (entity === 'projects') {
+          apiGetProjects().then(projects => {
+            this.projects = projects
+            this.notifyProjectsChange()
+          }).catch(e => console.error('[CrossSync] Failed to refresh projects:', e))
+        } else if (entity === 'terminals') {
+          // 终端由 PTY 服务管理，跨端刷新通知 UI 重新加载持久化列表
+          eventBus.emit('terminals:remote-changed')
+        } else if (entity === 'editors') {
+          // 刷新当前所有项目的 editors
+          const projectIds = [...new Set(this.editors.map(e => e.projectId))]
+          for (const pid of projectIds) {
+            apiLoadEditors(pid).then(editors => {
+              this.editors = this.editors.filter(e => e.projectId !== pid).concat(editors)
+              this.notifyEditorsChange()
+            }).catch(e => console.error('[CrossSync] Failed to refresh editors:', e))
+          }
+        }
+      })
+
       this.notifyInitialized()
       this.notifyProjectsChange()
       this.notifySettingsChange()
@@ -550,9 +574,10 @@ class AppBusinessClass {
     }))
     this.notifySessionsChange()
     this.notifyTabsChange()
-    // 保存
+    // 使用精确操作更新持久化终端名称，避免 DELETE ALL 竞态
     if (session.projectId) {
-      this.scheduleSaveTerminals(session.projectId)
+      updatePersistedTerminal(sessionId, { name: validName })
+        .catch(e => console.error('[Terminals] Failed to update persisted terminal name:', e))
     }
   }
 
@@ -593,9 +618,10 @@ class AppBusinessClass {
     // 通知更新
     this.notifySessionsChange()
     this.notifyTabsChange()
-    // 更新持久化
+    // 使用精确操作删除持久化终端，避免 DELETE ALL 竞态
     if (projectId) {
-      this.scheduleSaveTerminals(projectId)
+      removePersistedTerminal(sessionId)
+        .catch(e => console.error('[Terminals] Failed to remove persisted terminal:', e))
     }
   }
 
@@ -636,8 +662,14 @@ class AppBusinessClass {
     this.activeProjectId = projectId
     this.notifyActiveProjectChange(projectId)
     this.notifyTabsChange()
-    // 延迟保存
-    this.scheduleSaveTerminals(projectId)
+    // 延迟保存 — 使用精确操作持久化新建的终端
+    if (sessionId) {
+      const session = this.sessions.find(s => s.id === sessionId)
+      if (session) {
+        persistTerminal(sessionId, session.name, session.workingDir || '', null, projectId)
+          .catch(e => console.error('[Terminals] Failed to persist new terminal:', e))
+      }
+    }
     return sessionId
   }
 
@@ -673,8 +705,6 @@ class AppBusinessClass {
     } catch (e) {
       console.error('[Terminals] Failed to save terminals:', e)
     }
-    // 同步到 SQLite
-    this.scheduleSyncTerminalsToSQLite()
   }
 
   // ============ 编辑器列表保存/恢复 ============
@@ -951,9 +981,9 @@ class AppBusinessClass {
     }
     this.notifyEditorsChange()
     this.notifyTabsChange()
-    // 更新持久化
+    // 更新持久化：直接删除该条记录，不走 UPSERT 路径
     if (projectId) {
-      this.scheduleSaveEditors(projectId)
+      removeEditor(projectId, editorId).catch(e => console.error('[Editors] Failed to remove editor from DB:', e))
     }
   }
 

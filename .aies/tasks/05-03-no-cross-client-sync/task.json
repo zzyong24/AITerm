@@ -1,0 +1,16 @@
+{
+  "slug": "no-cross-client-sync",
+  "title": "跨客户端状态变更无广播同步",
+  "status": "planning",
+  "priority": "P0",
+  "owner": "moonlitclear",
+  "confirmed": false,
+  "autopilot": false,
+  "created_at": "2026-05-03 19:27:31",
+  "updated_at": "2026-05-03 19:27:31",
+  "commit": "",
+  "parent": null,
+  "children": [],
+  "related_files": [],
+  "notes": ""
+}

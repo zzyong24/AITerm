@@ -1,0 +1,6 @@
+{"phase": "research", "file": "src/api/http.ts", "symbol": "WS_BASE", "reason": "当前 WS 地址构造逻辑，需确认问题来源"}
+{"phase": "research", "file": "vite.config.ts", "symbol": "proxy", "reason": "确认现有代理配置，了解是否有 ws 代理"}
+{"phase": "research", "file": "server/index.mjs", "symbol": "WS_PORT", "reason": "确认 WS 服务端口（PORT+1）"}
+{"phase": "implement", "spec": "architecture.md", "reason": "代理配置属于前端构建层，不影响后端"}
+{"phase": "implement", "spec": "code-style.md", "reason": "vite.config 修改规范"}
+{"phase": "check", "spec": "quality-gates.md", "reason": "质量门自检"}
