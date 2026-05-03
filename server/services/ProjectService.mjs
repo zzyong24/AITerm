@@ -3,9 +3,11 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { execSync } from 'child_process'
 import { v4 as uuidv4 } from 'uuid'
 import { homedir } from 'os'
+import { EventEmitter } from 'events'
 
-export class ProjectService {
+export class ProjectService extends EventEmitter {
   constructor() {
+    super()
     // 在 Electron 环境下使用 app.getPath('userData')
     // 在纯 Node.js 环境下使用 ~/.aiterm
     this.storePath = join(homedir(), '.aiterm', 'projects.json')
@@ -71,6 +73,7 @@ export class ProjectService {
     store.projects.push(project)
     this.saveStore(store)
     console.log(`Added project: ${name} at ${path}`)
+    this.emit('changed', { entity: 'projects' })
     return project
   }
 
@@ -79,6 +82,7 @@ export class ProjectService {
     store.projects = store.projects.filter((p) => p.id !== id)
     this.saveStore(store)
     console.log(`Removed project: ${id}`)
+    this.emit('changed', { entity: 'projects' })
   }
 
   renameProject(id, newName) {
@@ -90,11 +94,8 @@ export class ProjectService {
     project.name = newName
     this.saveStore(store)
     console.log(`Renamed project ${id} to ${newName}`)
+    this.emit('changed', { entity: 'projects' })
     return project
-  }
-
-  getEditorPath() {
-    return this.loadStore().settings.editorPath
   }
 
   setEditorPath(editorPath) {
@@ -102,6 +103,11 @@ export class ProjectService {
     store.settings.editorPath = editorPath
     this.saveStore(store)
     console.log(`Set editor path: ${editorPath}`)
+    this.emit('changed', { entity: 'settings' })
+  }
+
+  getEditorPath() {
+    return this.loadStore().settings.editorPath
   }
 
   getTerminalFontSize() {
@@ -113,6 +119,7 @@ export class ProjectService {
     store.settings.terminalFontSize = fontSize
     this.saveStore(store)
     console.log(`Set terminal font size: ${fontSize}`)
+    this.emit('changed', { entity: 'settings' })
   }
 
   openInEditor(projectPath) {

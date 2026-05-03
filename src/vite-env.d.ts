@@ -7,7 +7,7 @@ declare module '*.vue' {
 }
 
 interface ElectronAPI {
-  invoke: (channel: string, ...args: any[]) => Promise<any>
+  invoke<T = any>(channel: string, ...args: any[]): Promise<T>
   on: (channel: string, callback: (data: any) => void) => () => void
   off: (channel: string, callback: (data: any) => void) => void
 }

@@ -3,9 +3,11 @@ import { eventBus } from '../utils/EventBus'
 import {
   createTerminalSession as apiCreateTerminalSession,
   closeTerminalSession as apiCloseTerminalSession,
+  listSessions as apiListSessions,
   terminalOutputListener,
   terminalClosedListener,
   terminalActivityListener,
+  terminalRenamedListener,
   stateChangedListener,
   getProjects as apiGetProjects,
   getHomeDir as apiGetHomeDir,
@@ -15,6 +17,7 @@ import {
   setTerminalFontSize as apiSetTerminalFontSize,
   addProject as apiAddProject,
   removeProject as apiRemoveProject,
+  renameProject as apiRenameProject,
   saveTerminals as apiSaveTerminals,
   loadTerminals as apiLoadTerminals,
   saveEditors as apiSaveEditors,
@@ -34,7 +37,7 @@ export interface Project {
   id: string
   name: string
   path: string
-  group?: string
+  group?: string | null
   git?: {
     isRepo: boolean
     changesCount: number
@@ -129,6 +132,8 @@ class AppBusinessClass {
   sidebarCollapsed = false
   sidebarWidth = 260
   showSettings = false
+  // 从 SQLite 加载的终端数据（供 restoreAllTerminals 使用）
+  persistedTerminals: any[] = []
 
   // 活跃度数据
   activityData: Record<string, { last: number; bytes: number }> = {}
@@ -288,8 +293,18 @@ class AppBusinessClass {
   renameProject(id: string, newName: string): Project | null {
     const project = this.projects.find(p => p.id === id)
     if (project) {
+      const oldName = project.name
       project.name = newName
       this.notifyProjectsChange()
+      // 同步到服务端持久化存储
+      apiRenameProject(id, newName)
+        .catch(e => {
+          console.error('[Projects] Failed to rename project on server, rolling back:', e)
+          project.name = oldName
+          this.notifyProjectsChange()
+        })
+      // 同步到 SQLite
+      this.scheduleSyncProjectsToSQLite()
       return project
     }
     return null
@@ -369,7 +384,9 @@ class AppBusinessClass {
 
           // 从 SQLite 恢复 terminals 和 editors
           if (fullState.terminals && fullState.terminals.length > 0) {
-            // 只恢复 sessionId，actual PTY session 在 restoreAllTerminals 中创建
+            console.log('[AppBusiness] Loaded terminals from SQLite:', fullState.terminals.length)
+            // 存储终端数据供 restoreAllTerminals 使用
+            this.persistedTerminals = fullState.terminals
           }
 
           loadedFromSQLite = true
@@ -424,18 +441,60 @@ class AppBusinessClass {
             this.notifyProjectsChange()
           }).catch(e => console.error('[CrossSync] Failed to refresh projects:', e))
         } else if (entity === 'terminals') {
-          // 终端由 PTY 服务管理，跨端刷新通知 UI 重新加载持久化列表
-          eventBus.emit('terminals:remote-changed')
+          // 跨端同步：采用远端已存在的 PTY sessions，不创建新进程
+          this.syncRemoteSessions().catch(e => console.error('[CrossSync] syncRemoteSessions failed:', e))
         } else if (entity === 'editors') {
-          // 刷新当前所有项目的 editors
+          // 刷新当前所有项目的 editors（pid 是 projectId UUID，需查表得到 path）
           const projectIds = [...new Set(this.editors.map(e => e.projectId))]
           for (const pid of projectIds) {
-            apiLoadEditors(pid).then(editors => {
-              this.editors = this.editors.filter(e => e.projectId !== pid).concat(editors)
+            const project = this.projects.find(p => p.id === pid)
+            const projectPath = project?.path ?? (pid ?? '')  // fallback: 若查不到则用原值
+            if (!projectPath) continue
+            apiLoadEditors(projectPath).then(persistedEditors => {
+              // 合并持久化字段与内存中运行时字段（content/modified/projectName）
+              const merged: EditorTab[] = persistedEditors.map(pe => {
+                const existing = this.editors.find(e => e.id === pe.id && e.projectId === pid)
+                return {
+                  projectId: pid,
+                  projectName: existing?.projectName ?? project?.name ?? null,
+                  path: pe.path,
+                  id: pe.id,
+                  name: pe.name,
+                  content: existing?.content ?? '',
+                  modified: existing?.modified ?? false,
+                  scrollToLine: pe.scrollToLine,
+                }
+              })
+              this.editors = this.editors.filter(e => e.projectId !== pid).concat(merged)
               this.notifyEditorsChange()
             }).catch(e => console.error('[CrossSync] Failed to refresh editors:', e))
           }
+        } else if (entity === 'settings') {
+          // 刷新本地设置（字体大小、编辑器路径）
+          Promise.all([apiGetEditorPath(), apiGetTerminalFontSize()])
+            .then(([editorPath, fontSize]) => {
+              this.editorPath = editorPath || ''
+              this.terminalFontSize = fontSize || 14
+              this.notifySettingsChange()
+            })
+            .catch(e => console.error('[CrossSync] Failed to refresh settings:', e))
         }
+      })
+
+      // BUG-04: 订阅远端 terminal-renamed 事件，立即更新 Tab 标签，无需等全量 state reload
+      terminalRenamedListener(({ sessionId, name }) => {
+        const session = this.sessions.find(s => s.id === sessionId)
+        if (!session) return
+        const validName = name.replace(/[^\w\u4e00-\u9fa5\-_]/g, '')
+        session.name = validName
+        this.tabs = this.tabs.map(tab => ({
+          ...tab,
+          items: tab.items.map(item =>
+            item.id === sessionId ? { ...item, name: validName } : item
+          )
+        }))
+        this.notifySessionsChange()
+        this.notifyTabsChange()
       })
 
       this.notifyInitialized()
@@ -497,6 +556,28 @@ class AppBusinessClass {
 
   // 自动恢复所有项目的终端
   async restoreAllTerminals() {
+    // 如果有从 SQLite 加载的终端数据，使用它而不是调 API
+    if (this.persistedTerminals.length > 0) {
+      console.log('[AppBusiness] Restoring terminals from SQLite:', this.persistedTerminals.length)
+      for (const terminal of this.persistedTerminals) {
+        // 找到对应的项目
+        const project = this.projects.find(p => p.id === terminal.projectId)
+        if (project) {
+          try {
+            const sessionId = await this.launchTerminal(project.id, project.name, terminal.cwd)
+            if (terminal.name && terminal.name !== project.name) {
+              this.renameSession(sessionId, terminal.name)
+            }
+            console.log('[AppBusiness] Restored terminal:', terminal.name, 'for project:', project.name)
+          } catch (e) {
+            console.warn('[AppBusiness] Failed to restore terminal:', terminal.name, e)
+          }
+        }
+      }
+      return
+    }
+
+    // 兜底：从 API 加载（HTTP 模式或旧数据）
     for (const project of this.projects) {
       try {
         const terminals = await apiLoadTerminals(project.path)
@@ -671,6 +752,71 @@ class AppBusinessClass {
       }
     }
     return sessionId
+  }
+
+  // ============ 远端 session 采用（不创建新 PTY） ============
+  /**
+   * 采用一个已在服务端存在的 PTY session，只在本地 UI 添加 session/tab 条目。
+   * 不调用 apiCreateTerminalSession，避免重复创建新进程。
+   */
+  adoptSession(sessionId: string, projectId: string | null, projectName: string | null, workingDir: string, name?: string) {
+    // 如果已经存在则跳过
+    if (this.sessions.find(s => s.id === sessionId)) return
+
+    const displayName = name || projectName || '终端'
+    const newSession: TerminalSession = {
+      id: sessionId,
+      projectId,
+      projectName,
+      workingDir: workingDir || '~',
+      name: displayName,
+      alive: true,
+      lastActivity: 0,
+      children: [],
+      activeSubId: null
+    }
+    this.sessions.push(newSession)
+
+    // 更新 tabs：找到对应项目的 tab 并追加
+    if (projectId) {
+      const existingTab = this.tabs.find(t => t.projectId === projectId)
+      if (existingTab) {
+        existingTab.items.push({ id: sessionId, type: 'terminal' as const, name: displayName })
+        existingTab.activeItemId = sessionId
+      } else {
+        this.tabs.push({
+          projectId,
+          projectName: projectName || '默认',
+          items: [{ id: sessionId, type: 'terminal' as const, name: displayName }],
+          activeItemId: sessionId
+        })
+      }
+    }
+
+    this.notifySessionsChange()
+    this.notifyTabsChange()
+    console.log('[AppBusiness] adoptSession: adopted remote session', sessionId, 'for project', projectId)
+  }
+
+  /**
+   * 从服务端拉取当前所有 PTY sessions，把本地没有的采用进来。
+   * 由 stateChangedListener entity=terminals 触发，实现跨端 terminal 同步。
+   */
+  async syncRemoteSessions() {
+    const remoteSessions = await apiListSessions()
+    let hasNew = false
+    for (const remote of remoteSessions) {
+      if (!this.sessions.find(s => s.id === remote.id)) {
+        // 补充项目名（服务端可能只有 projectId）
+        const project = this.projects.find(p => p.id === remote.projectId)
+        const projectName = remote.projectName || project?.name || null
+        this.adoptSession(remote.id, remote.projectId, projectName, remote.workingDir)
+        hasNew = true
+      }
+    }
+    if (hasNew) {
+      console.log('[AppBusiness] syncRemoteSessions: adopted new sessions, count=', remoteSessions.length)
+    }
   }
 
   // ============ 终端列表保存/恢复 ============
@@ -1231,6 +1377,34 @@ class AppBusinessClass {
 
   get projectTabList(): string[] {
     return this.tabs.map(t => t.projectId)
+  }
+
+  // ============ 文件系统同步 ============
+  // 清理已不存在的文件和对应的编辑器
+  async cleanupInvalidEditors(): Promise<void> {
+    const invalidEditors: string[] = []
+
+    // 检查每个编辑器的文件是否还存在
+    for (const editor of this.editors) {
+      if (!editor.path) continue
+      try {
+        await apiReadFile(editor.path)
+      } catch {
+        // 文件不存在，标记需要关闭
+        invalidEditors.push(editor.id)
+        console.log('[AppBusiness] File no longer exists:', editor.path)
+      }
+    }
+
+    // 关闭所有无效编辑器
+    for (const editorId of invalidEditors) {
+      this.closeEditor(editorId)
+      console.log('[AppBusiness] Closed invalid editor:', editorId)
+    }
+
+    if (invalidEditors.length > 0) {
+      console.log('[AppBusiness] Cleaned up', invalidEditors.length, 'invalid editors')
+    }
   }
 }
 

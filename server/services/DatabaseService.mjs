@@ -2,9 +2,11 @@ import Database from 'better-sqlite3'
 import { join, dirname } from 'path'
 import { existsSync, mkdirSync } from 'fs'
 import { homedir } from 'os'
+import { EventEmitter } from 'events'
 
-export class DatabaseService {
+export class DatabaseService extends EventEmitter {
   constructor() {
+    super()
     // 数据库路径：~/.aiterm/aiterm.db
     const dbDir = join(homedir(), '.aiterm')
     this.dbPath = join(dbDir, 'aiterm.db')
@@ -115,6 +117,7 @@ export class DatabaseService {
       'INSERT INTO projects (id, name, path, "order", lastAccessedAt) VALUES (?, ?, ?, ?, datetime(\'now\'))'
     )
     stmt.run(id, name, path, order)
+    this.emit('changed', { entity: 'projects' })
     return this.getProject(id)
   }
 
@@ -128,6 +131,7 @@ export class DatabaseService {
   updateProject(id, name, path, order = 0) {
     const stmt = this.db.prepare('UPDATE projects SET name = ?, path = ?, "order" = ? WHERE id = ?')
     stmt.run(name, path, order, id)
+    this.emit('changed', { entity: 'projects' })
   }
 
   /**
@@ -137,6 +141,7 @@ export class DatabaseService {
   removeProject(id) {
     const stmt = this.db.prepare('DELETE FROM projects WHERE id = ?')
     stmt.run(id)
+    this.emit('changed', { entity: 'projects' })
   }
 
   /**
@@ -191,6 +196,7 @@ export class DatabaseService {
       'INSERT INTO terminals (id, projectId, name, cwd, taskSlug, history, lastActiveAt) VALUES (?, ?, ?, ?, ?, \'[]\', datetime(\'now\'))'
     )
     stmt.run(id, projectId, name, cwd, taskSlug)
+    this.emit('changed', { entity: 'terminals' })
     return this.getTerminal(id)
   }
 
@@ -231,6 +237,7 @@ export class DatabaseService {
       `UPDATE terminals SET ${setClauses.join(', ')} WHERE id = ?`
     )
     stmt.run(...values)
+    this.emit('changed', { entity: 'terminals' })
   }
 
   /**
@@ -240,6 +247,7 @@ export class DatabaseService {
   removeTerminal(id) {
     const stmt = this.db.prepare('DELETE FROM terminals WHERE id = ?')
     stmt.run(id)
+    this.emit('changed', { entity: 'terminals' })
   }
 
   /**
@@ -249,6 +257,7 @@ export class DatabaseService {
   deleteTerminalsByProject(projectId) {
     const stmt = this.db.prepare('DELETE FROM terminals WHERE projectId = ?')
     stmt.run(projectId)
+    this.emit('changed', { entity: 'terminals' })
   }
 
   // ============ Editors ============
@@ -290,6 +299,7 @@ export class DatabaseService {
         scrollToLine = excluded.scrollToLine
     `)
     stmt.run(projectId, id, path, name, scrollToLine)
+    this.emit('changed', { entity: 'editors' })
   }
 
   /**
@@ -300,6 +310,7 @@ export class DatabaseService {
   removeEditor(projectId, id) {
     const stmt = this.db.prepare('DELETE FROM editors WHERE projectId = ? AND id = ?')
     stmt.run(projectId, id)
+    this.emit('changed', { entity: 'editors' })
   }
 
   /**
@@ -309,6 +320,7 @@ export class DatabaseService {
   clearEditors(projectId) {
     const stmt = this.db.prepare('DELETE FROM editors WHERE projectId = ?')
     stmt.run(projectId)
+    this.emit('changed', { entity: 'editors' })
   }
 
   // ============ Settings ============
@@ -334,6 +346,8 @@ export class DatabaseService {
       'INSERT INTO settings (key, value) VALUES (?, ?)\n      ON CONFLICT(key) DO UPDATE SET value = excluded.value'
     )
     stmt.run(key, value)
+    // BUG-08: 广播 settings 变更，触发跨端同步
+    this.emit('changed', { entity: 'settings' })
   }
 
   // ============ 完整状态 ============

@@ -301,6 +301,21 @@ function registerIpcHandlers() {
     return { success: true }
   })
 
+  // 终端历史 IPC 处理器
+  ipcMain.handle('save-terminal-history', async (_, projectPath: string, workingDir: string, entries: any[]) => {
+    fileService.saveTerminalHistory(projectPath, workingDir, entries)
+    return { success: true }
+  })
+
+  ipcMain.handle('load-terminal-history', async (_, projectPath: string, workingDir: string) => {
+    return fileService.loadTerminalHistory(projectPath, workingDir)
+  })
+
+  ipcMain.handle('clear-terminal-history', async (_, projectPath: string, workingDir: string) => {
+    fileService.clearTerminalHistory(projectPath, workingDir)
+    return { success: true }
+  })
+
   ipcMain.handle('is-git-ignored', async (_, path: string) => {
     return fileService.isGitIgnored(path)
   })
@@ -422,8 +437,15 @@ function registerIpcHandlers() {
     return { success: true }
   })
 
-  ipcMain.handle('persist-terminal', async (_, id: string, name: string, cwd: string, taskSlug?: string) => {
-    return dbService.addTerminal(id, name, cwd, taskSlug)
+  ipcMain.handle('persist-terminal', async (_, id: string, name: string, cwd: string, taskSlug?: string, projectId?: string | null) => {
+    return dbService.addTerminal(id, name, cwd, taskSlug, projectId ?? null)
+  })
+
+  ipcMain.handle('rename-terminal-session', async (_, id: string, name: string) => {
+    const validName = String(name).replace(/[^\w\u4e00-\u9fa5\-_]/g, '')
+    dbService.updateTerminal(id, { name: validName })
+    ptyService?.emit('terminal-renamed', { sessionId: id, name: validName })
+    return { success: true, name: validName }
   })
 
   ipcMain.handle('update-persisted-terminal', async (_, id: string, updates: any) => {

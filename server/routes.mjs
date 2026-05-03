@@ -32,8 +32,10 @@ export function registerRoutes(app, services, options = {}) {
       const { id } = req.params
       const { name } = req.body
       const validName = String(name).replace(/[^\w\u4e00-\u9fa5\-_]/g, '')
-      const message = JSON.stringify({ type: 'terminal-renamed', sessionId: id, name: validName })
-      broadcastToWs(message)
+      // 持久化到 SQLite（dbService.on('changed') 会自动广播 state_changed）
+      dbService.updateTerminal(id, { name: validName })
+      // 发送 UI 专用事件（用于立即更新 Tab 标签，无需等待全量 state reload）
+      ptyService.emit('terminal-renamed', { sessionId: id, name: validName })
       res.json({ success: true, name: validName })
     } catch (e) {
       res.status(500).json({ error: e.message })
@@ -86,7 +88,6 @@ export function registerRoutes(app, services, options = {}) {
     try {
       const { name, path, group } = req.body
       const project = projectService.addProject(name, path, group)
-      broadcastToWs(JSON.stringify({ type: 'state_changed', entity: 'projects' }))
       res.json(project)
     } catch (e) {
       res.status(500).json({ error: e.message })
@@ -100,7 +101,6 @@ export function registerRoutes(app, services, options = {}) {
       // 级联删除：清除该项目下的所有终端和编辑器
       dbService.deleteTerminalsByProject(id)
       dbService.clearEditors(id)
-      broadcastToWs(JSON.stringify({ type: 'state_changed', entity: 'projects' }))
       res.json({ success: true })
     } catch (e) {
       res.status(500).json({ error: e.message })
@@ -112,7 +112,6 @@ export function registerRoutes(app, services, options = {}) {
       const { id } = req.params
       const { newName } = req.body
       const project = projectService.renameProject(id, newName)
-      broadcastToWs(JSON.stringify({ type: 'state_changed', entity: 'projects' }))
       res.json(project)
     } catch (e) {
       res.status(500).json({ error: e.message })
@@ -526,7 +525,6 @@ export function registerRoutes(app, services, options = {}) {
     try {
       const { id, name, cwd, taskSlug, projectId } = req.body
       const terminal = dbService.addTerminal(id, name, cwd, taskSlug, projectId)
-      broadcastToWs(JSON.stringify({ type: 'state_changed', entity: 'terminals' }))
       res.json(terminal)
     } catch (e) {
       res.status(500).json({ error: e.message })
@@ -538,7 +536,6 @@ export function registerRoutes(app, services, options = {}) {
       const { id } = req.params
       const updates = req.body
       dbService.updateTerminal(id, updates)
-      broadcastToWs(JSON.stringify({ type: 'state_changed', entity: 'terminals' }))
       res.json({ success: true })
     } catch (e) {
       res.status(500).json({ error: e.message })
@@ -549,7 +546,6 @@ export function registerRoutes(app, services, options = {}) {
     try {
       const { id } = req.params
       dbService.removeTerminal(id)
-      broadcastToWs(JSON.stringify({ type: 'state_changed', entity: 'terminals' }))
       res.json({ success: true })
     } catch (e) {
       res.status(500).json({ error: e.message })
@@ -564,7 +560,6 @@ export function registerRoutes(app, services, options = {}) {
           dbService.saveEditor(projectId || e.projectId, e.id, e.path, e.name, e.scrollToLine)
         }
       }
-      broadcastToWs(JSON.stringify({ type: 'state_changed', entity: 'editors' }))
       res.json({ success: true })
     } catch (e) {
       res.status(500).json({ error: e.message })
@@ -575,7 +570,6 @@ export function registerRoutes(app, services, options = {}) {
     try {
       const { projectId, id } = req.params
       dbService.removeEditor(projectId, id)
-      broadcastToWs(JSON.stringify({ type: 'state_changed', entity: 'editors' }))
       res.json({ success: true })
     } catch (e) {
       res.status(500).json({ error: e.message })
@@ -630,6 +624,20 @@ export function registerRoutes(app, services, options = {}) {
       const message = JSON.stringify({ type: 'activity', ...data })
       broadcastToWs(message)
     })
+
+    // 监听 Service 层变更事件，统一广播（IPC 和 HTTP 两条写入路径都能触发）
+    projectService.on('changed', (data) => {
+      broadcastToWs(JSON.stringify({ type: 'state_changed', ...data }))
+    })
+
+    dbService.on('changed', (data) => {
+      broadcastToWs(JSON.stringify({ type: 'state_changed', ...data }))
+    })
+
+    // UI 专用事件：terminal 重命名（即时更新 Tab 标签，不走全量 state reload）
+    ptyService.on('terminal-renamed', (data) => {
+      broadcastToWs(JSON.stringify({ type: 'terminal-renamed', ...data }))
+    })
   }
 
   /**
@@ -658,5 +666,5 @@ export function registerRoutes(app, services, options = {}) {
     })
   }
 
-  return { wss, setHttpServer }
+  return { wss, setHttpServer, broadcastToWs }
 }

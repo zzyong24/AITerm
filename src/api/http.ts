@@ -383,10 +383,10 @@ export const updateFullState = (state: Partial<PersistedState>) =>
   })
 
 // 持久化终端（创建）
-export const persistTerminal = (id: string, name: string, cwd: string, taskSlug?: string) =>
+export const persistTerminal = (id: string, name: string, cwd: string, taskSlug?: string | null, projectId?: string | null) =>
   apiCall('/persist/terminals', {
     method: 'POST',
-    body: JSON.stringify({ id, name, cwd, taskSlug }),
+    body: JSON.stringify({ id, name, cwd, taskSlug, projectId }),
   })
 
 // 持久化终端（更新）
@@ -485,6 +485,14 @@ export const terminalClosedListener = (callback: (data: { session_id: string }) 
 export const terminalActivityListener = (callback: (data: { session_id: string; bytes: number }) => void) => {
   terminalWs.on('activity', callback)
   return () => terminalWs.off('activity', callback)
+}
+
+/**
+ * terminal-renamed：服务端广播后立即更新本地 Tab 标签，无需等待全量 state reload
+ */
+export const terminalRenamedListener = (callback: (data: { sessionId: string; name: string }) => void) => {
+  terminalWs.on('terminal-renamed', callback)
+  return () => terminalWs.off('terminal-renamed', callback)
 }
 
 /**
