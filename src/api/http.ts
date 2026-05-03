@@ -1,5 +1,6 @@
-const API_BASE = `http://${window.location.hostname}:5001/api`
-const WS_BASE = `ws://${window.location.hostname}:5002`
+// 使用相对路径，API 通过 Vite 代理到 5001，WebSocket 直接连接同端口
+const API_BASE = '/api'
+const WS_BASE = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`
 
 export interface Project {
   id: string

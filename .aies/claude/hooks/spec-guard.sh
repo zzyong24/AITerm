@@ -1,9 +1,9 @@
 #!/bin/bash
 # spec-guard: 在写业务源码前检查规范文件是否存在
 # 触发：PreToolUse Write|Edit
-# 逻辑：目标文件是源码 → 找项目根（.git 目录）→ 检查 .aies/spec 或 .ai 是否存在且非空
+# 逻辑：目标文件是源码 → 找项目根（.git 目录）→ 检查 .aies/.ai 或 .aies/spec 是否存在且非空
 #
-# 通过：.aies/spec/ 或 .aies/ 或 .ai/ 存在且非空
+# 通过：.aies/.ai/ 或 .aies/spec/ 存在且非空
 # 拦截：上述目录均不存在或为空
 
 INPUT=$(cat)
@@ -12,7 +12,7 @@ FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
 [ -z "$FILE_PATH" ] && exit 0
 
 # 白名单：spec/doc/config 类路径直接放行
-if echo "$FILE_PATH" | grep -qE '(\.aies|\.ai/|/docs/|/doc/|CLAUDE\.md|\.claude/|settings\.json)'; then
+if echo "$FILE_PATH" | grep -qE '(\.aies/|\.claude/|/docs/|/doc/|CLAUDE\.md|settings\.json)'; then
   exit 0
 fi
 
@@ -34,9 +34,9 @@ find_project_root() {
 PROJECT_ROOT=$(find_project_root "$(dirname "$FILE_PATH")")
 [ -z "$PROJECT_ROOT" ] && PROJECT_ROOT=$(pwd)
 
-# 检查 spec 目录（.aies/spec > .aies > .ai，任一存在且非空即通过）
+# 检查 spec 目录（.aies/.ai > .aies/spec，任一存在且非空即通过）
 SPEC_OK=false
-for dir in ".aies/spec" ".aies" ".ai"; do
+for dir in ".aies/.ai" ".aies/spec"; do
   full="$PROJECT_ROOT/$dir"
   if [ -d "$full" ] && [ -n "$(ls -A "$full" 2>/dev/null)" ]; then
     SPEC_OK=true

@@ -49,6 +49,19 @@
 - 新增文件：
   - `electron/services/WatcherService.ts` — chokidar 封装（如独立）
 
+## 性能优化：路径索引 Map
+
+**问题**：每次 watcher 事件触发都调用 `findTreeNodeByPath` 递归遍历整棵树，当事件密集时（如 git 操作触发大量文件变化）会造成 UI 卡顿。
+
+**解法**：使用 `pathIndex: Map<string, TreeNode>` 维护路径到节点的映射，将查找从 O(n) 降到 O(1)。
+
+**实现**：
+1. `buildPathIndex()` — 遍历 treeData 构建索引
+2. `flushWatcherEvents()` — 使用 `pathIndex.get(parentPath)` 查找父节点，不再递归
+3. `loadTree()` / `onLoadData()` — 树结构变化后重建索引
+
+**效果**：无论树有多大、watcher 事件多密集，每个事件只需一次 Map 查找。
+
 ## 🤔 Agent 的不确定点
 
 1. **是否需要监听重命名和移动？** 这类事件在 chokidar 中表现为 `unlink` + `add` 组合，是否需要合并处理避免两次 UI 更新？

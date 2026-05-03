@@ -1,0 +1,7 @@
+{
+  "slug": "05-02-file-tree-not-update",
+  "title": "修复: 文件树未同步更新已删除/移动的文件",
+  "status": "in_progress",
+  "created": "2026-05-02",
+  "source": "user"
+}

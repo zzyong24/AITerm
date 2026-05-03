@@ -490,12 +490,20 @@ export class FileService {
     const watcher = chokidar.watch(rootPath, {
       persistent: true,
       ignoreInitial: true,
-      depth: 0, // 只监听直接子节点，不递归
-      ignored: ['**/.DS_Store'],
+      depth: 99,
+      ignored: [
+        '**/node_modules/**',
+        '**/.git/**',
+        '**/dist/**',
+        '**/build/**',
+        '**/*.log',
+        '**/.DS_Store'
+      ],
       awaitWriteFinish: {
-        stabilityThreshold: 300,
-        pollInterval: 100
-      }
+        stabilityThreshold: 500,
+        pollInterval: 200
+      },
+      usePolling: false
     })
 
     watcher.on('add', (filePath) => {

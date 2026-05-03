@@ -296,3 +296,32 @@ export const updateEditors = (editors: { projectId: string; id: string; path: st
 
 export const removeEditor = (projectId: string, id: string) =>
   window.electronAPI.invoke('remove-editor', projectId, id)
+
+// 编辑器列表保存/恢复
+export interface EditorData {
+  id: string
+  path: string
+  name: string
+  scrollToLine?: number
+}
+
+export const saveEditors = (projectPath: string, editors: EditorData[]) =>
+  window.electronAPI.invoke('update-editors', editors.map(e => ({ ...e, projectId: projectPath })))
+
+export const loadEditors = (projectPath: string): Promise<EditorData[]> =>
+  window.electronAPI.invoke<EditorData[]>('load-editors', projectPath)
+
+// 终端列表保存/恢复
+export interface TerminalData {
+  id: string
+  name: string
+  workingDir: string
+  children?: any[]
+  activeSubId?: string | null
+}
+
+export const saveTerminals = (projectPath: string, terminals: TerminalData[]) =>
+  window.electronAPI.invoke('save-terminals', projectPath, terminals)
+
+export const loadTerminals = (projectPath: string): Promise<TerminalData[]> =>
+  window.electronAPI.invoke<TerminalData[]>('load-terminals', projectPath)

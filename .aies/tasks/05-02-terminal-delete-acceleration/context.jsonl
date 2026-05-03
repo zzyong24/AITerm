@@ -1,0 +1,2 @@
+{"phase": "research", "spec": "terminal-acceleration.md", "reason": "调研业界删除加速实现方式"}
+{"phase": "implement", "spec": "terminal.md", "reason": "实现删除键加速效果"}

@@ -25,6 +25,7 @@
         <div class="explorer-header">
           <span class="explorer-title">项目</span>
           <button class="btn-add" @click="openAddModal" title="添加项目 [Ctrl+N]">+</button>
+          <button class="btn-add" @click="handleRefreshAllProjects" title="刷新所有项目">↻</button>
         </div>
         <div class="project-items">
           <template v-for="(items, group) in grouped" :key="group">
@@ -63,7 +64,7 @@
                 </template>
                 <!-- 目录树 -->
                 <div v-if="expandedId === project.id" class="project-tree-container">
-                  <DirectoryTree :root-path="project.path" @node-click="handleTreeNodeClick"
+                  <DirectoryTree ref="activeTree" :root-path="project.path" @node-click="handleTreeNodeClick"
                     @open-editor="handleOpenEditor"
                     @refresh="handleRefreshDirectory" />
                 </div>
@@ -722,14 +723,25 @@ export default defineComponent({
       console.log('Node clicked:', path)
     },
 
-    handleRefreshDirectory(dirPath: string) {
+    handleRefreshAllProjects() {
+      // 刷新所有项目的文件树
+      appBusiness.refreshProjects()
       // 触发目录树重新加载
-      // 通过切换 expandedId 来强制刷新
       const currentExpanded = this.expandedId
       this.expandedId = null
       this.$nextTick(() => {
         this.expandedId = currentExpanded
       })
+    },
+
+    handleRefreshDirectory(dirPath: string) {
+      // 直接调用目录树的 loadTree 方法重新加载
+      const treeComponent = this.$refs.activeTree as InstanceType<typeof DirectoryTree> | undefined
+      if (treeComponent?.loadTree) {
+        treeComponent.loadTree()
+      }
+      // 清理已不存在的编辑器
+      appBusiness.cleanupInvalidEditors()
     },
 
     handleOpenFile() {

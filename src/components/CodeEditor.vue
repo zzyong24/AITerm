@@ -579,12 +579,6 @@ export default defineComponent({
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
-/* Markdown body styles */
-.preview-container :deep(.markdown-body) {
-  max-width: 900px;
-  margin: 0 auto;
-}
-
 .preview-container :deep(h1),
 .preview-container :deep(h2),
 .preview-container :deep(h3),
@@ -695,10 +689,15 @@ export default defineComponent({
 .preview-container :deep(td) {
   padding: 8px 13px;
   border: 1px solid #dfe2e5;
+  color: #333333;
 }
 
 .preview-container :deep(th) {
   background-color: #f6f8fa;
+}
+
+.preview-container :deep(tr:nth-child(even)) {
+  background-color: #fafbfc;
 }
 
 .no-editor {

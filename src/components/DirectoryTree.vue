@@ -119,6 +119,8 @@ export default defineComponent({
     GitCommitDialog
   },
 
+  expose: ['loadTree'],
+
   props: {
     rootPath: {
       type: String,
@@ -159,7 +161,12 @@ export default defineComponent({
         tooManyFilesCount: 0
       },
       // 文件监听器引用
-      watcherCleanups: [] as (() => void)[]
+      watcherCleanups: [] as (() => void)[],
+      // watcher 事件防抖
+      pendingWatcherEvents: [] as Array<{ type: 'add' | 'unlink' | 'addDir' | 'unlinkDir', data: WatcherEvent }>,
+      watcherDebounceTimer: null as ReturnType<typeof setTimeout> | null,
+      // 路径索引 Map：O(1) 查找节点，避免每次递归遍历整棵树
+      pathIndex: new Map<string, TreeNode>() as Map<string, TreeNode>
     }
   },
 
@@ -168,16 +175,28 @@ export default defineComponent({
 
     window.addEventListener('click', this.closeContextMenu)
 
-    // 启动文件监听
-    this.setupWatcher()
+    // TODO: watcher 功能暂停，重新设计后启用
+    // this.setupWatcher()
   },
 
   beforeUnmount() {
     window.removeEventListener('click', this.closeContextMenu)
-    this.cleanupWatcher()
+    // this.cleanupWatcher()
   },
 
   methods: {
+    // 构建路径索引，支持 O(1) 查找节点
+    buildPathIndex() {
+      this.pathIndex.clear()
+      const traverse = (nodes: TreeNode[]) => {
+        for (const node of nodes) {
+          this.pathIndex.set(node.path, node)
+          if (node.children) traverse(node.children)
+        }
+      }
+      traverse(this.treeData)
+    },
+
     async setupWatcher() {
       // 计算 projectPath（取 rootPath 的父目录作为 project 标识）
       const projectPath = this.rootPath
@@ -201,6 +220,11 @@ export default defineComponent({
         cleanup()
       }
       this.watcherCleanups = []
+      if (this.watcherDebounceTimer !== null) {
+        clearTimeout(this.watcherDebounceTimer)
+        this.watcherDebounceTimer = null
+      }
+      this.pendingWatcherEvents = []
       stopWatcher(this.rootPath).catch(() => {})
     },
 
@@ -208,24 +232,42 @@ export default defineComponent({
       // 只处理属于本 rootPath 的事件
       if (data.projectPath !== this.rootPath) return
 
-      // 找到变化目录对应的 treeNode
-      const parentNode = this.findTreeNodeByPath(this.treeData, data.parentPath)
-      if (!parentNode) return
+      this.pendingWatcherEvents.push({ type, data })
 
-      // 若该目录未展开，忽略（下次展开自然加载最新）
-      if (!this.expandedKeys.includes(data.parentPath)) return
-
-      if (type === 'add' || type === 'addDir') {
-        // 检查是否已存在同名节点
-        const exists = parentNode.children?.some(c => c.title === data.name)
-        if (exists) return
-        // 插入新节点
-        this.insertNode(parentNode, data.name, data.isDirectory)
-      } else {
-        // 删除节点
-        this.removeNodeByName(parentNode, data.name)
+      if (this.watcherDebounceTimer === null) {
+        this.watcherDebounceTimer = setTimeout(() => {
+          this.flushWatcherEvents()
+        }, 500)
       }
-      this.treeData = [...this.treeData]
+    },
+
+    flushWatcherEvents() {
+      this.watcherDebounceTimer = null
+      const events = this.pendingWatcherEvents
+      this.pendingWatcherEvents = []
+
+      for (const { type, data } of events) {
+        // 使用 pathIndex O(1) 查找，不再递归遍历
+        const parentNode = this.pathIndex.get(data.parentPath)
+        if (!parentNode) continue
+
+        if (!parentNode.children) {
+          parentNode.children = []
+        }
+
+        if (type === 'add' || type === 'addDir') {
+          const exists = parentNode.children.some(c => c.title === data.name)
+          if (exists) continue
+          this.insertNode(parentNode, data.name, data.isDirectory)
+        } else {
+          this.removeNodeByName(parentNode, data.name)
+        }
+      }
+
+      if (events.length > 0) {
+        this.treeData = [...this.treeData]
+        this.buildPathIndex()
+      }
     },
 
     findTreeNodeByPath(tree: TreeNode[], path: string): TreeNode | null {
@@ -273,6 +315,7 @@ export default defineComponent({
       try {
         const children = await this.readDirectory(this.rootPath)
         this.treeData = children
+        this.buildPathIndex()
         this.expandedKeys = []
         // 非阻塞刷新直接下级的 git 角标
         if (children.length > 0) {
@@ -353,6 +396,7 @@ export default defineComponent({
         const children = await this.readDirectory(treeNode.dataRef.path)
         treeNode.dataRef.children = children
         this.treeData = [...this.treeData]
+        this.buildPathIndex()
 
         // 延迟加载子目录的 git 状态（不阻塞展开）
         const gitDirs = children.filter((c: TreeNode) => c.hasGitDir)

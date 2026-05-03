@@ -128,6 +128,8 @@ class AppBusinessClass {
   sidebarCollapsed = false
   sidebarWidth = 260
   showSettings = false
+  // 从 SQLite 加载的终端数据（供 restoreAllTerminals 使用）
+  persistedTerminals: any[] = []
 
   // 活跃度数据
   activityData: Record<string, { last: number; bytes: number }> = {}
@@ -289,6 +291,8 @@ class AppBusinessClass {
     if (project) {
       project.name = newName
       this.notifyProjectsChange()
+      // 同步到 SQLite
+      this.scheduleSyncProjectsToSQLite()
       return project
     }
     return null
@@ -368,7 +372,9 @@ class AppBusinessClass {
 
           // 从 SQLite 恢复 terminals 和 editors
           if (fullState.terminals && fullState.terminals.length > 0) {
-            // 只恢复 sessionId，actual PTY session 在 restoreAllTerminals 中创建
+            console.log('[AppBusiness] Loaded terminals from SQLite:', fullState.terminals.length)
+            // 存储终端数据供 restoreAllTerminals 使用
+            this.persistedTerminals = fullState.terminals
           }
 
           loadedFromSQLite = true
@@ -473,6 +479,28 @@ class AppBusinessClass {
 
   // 自动恢复所有项目的终端
   async restoreAllTerminals() {
+    // 如果有从 SQLite 加载的终端数据，使用它而不是调 API
+    if (this.persistedTerminals.length > 0) {
+      console.log('[AppBusiness] Restoring terminals from SQLite:', this.persistedTerminals.length)
+      for (const terminal of this.persistedTerminals) {
+        // 找到对应的项目
+        const project = this.projects.find(p => p.id === terminal.projectId)
+        if (project) {
+          try {
+            const sessionId = await this.launchTerminal(project.id, project.name, terminal.cwd)
+            if (terminal.name && terminal.name !== project.name) {
+              this.renameSession(sessionId, terminal.name)
+            }
+            console.log('[AppBusiness] Restored terminal:', terminal.name, 'for project:', project.name)
+          } catch (e) {
+            console.warn('[AppBusiness] Failed to restore terminal:', terminal.name, e)
+          }
+        }
+      }
+      return
+    }
+
+    // 兜底：从 API 加载（HTTP 模式或旧数据）
     for (const project of this.projects) {
       try {
         const terminals = await apiLoadTerminals(project.path)
@@ -1201,6 +1229,34 @@ class AppBusinessClass {
 
   get projectTabList(): string[] {
     return this.tabs.map(t => t.projectId)
+  }
+
+  // ============ 文件系统同步 ============
+  // 清理已不存在的文件和对应的编辑器
+  async cleanupInvalidEditors(): Promise<void> {
+    const invalidEditors: string[] = []
+
+    // 检查每个编辑器的文件是否还存在
+    for (const editor of this.editors) {
+      if (!editor.path) continue
+      try {
+        await apiReadFile(editor.path)
+      } catch {
+        // 文件不存在，标记需要关闭
+        invalidEditors.push(editor.id)
+        console.log('[AppBusiness] File no longer exists:', editor.path)
+      }
+    }
+
+    // 关闭所有无效编辑器
+    for (const editorId of invalidEditors) {
+      this.closeEditor(editorId)
+      console.log('[AppBusiness] Closed invalid editor:', editorId)
+    }
+
+    if (invalidEditors.length > 0) {
+      console.log('[AppBusiness] Cleaned up', invalidEditors.length, 'invalid editors')
+    }
   }
 }
 

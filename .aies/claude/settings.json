@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cat | .claude/hooks/spec-guard.sh",
+            "command": "cat | .aies/claude/hooks/spec-guard.sh",
             "statusMessage": "检查规范文件..."
           }
         ]
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/session-start.py",
+            "command": "python3 .aies/claude/hooks/session-start.py",
             "timeout": 10
           }
         ]
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/session-start.py",
+            "command": "python3 .aies/claude/hooks/session-start.py",
             "timeout": 10
           }
         ]
