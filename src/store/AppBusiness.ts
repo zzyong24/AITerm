@@ -578,6 +578,9 @@ class AppBusinessClass {
             if (terminal.name && terminal.name !== project.name) {
               this.renameSession(sessionId, terminal.name)
             }
+            // BUG-FIX: 删除旧的 persisted 记录，防止每次刷新翻倍
+            // launchTerminal 已经用新 sessionId 写入 SQLite，旧 terminal.id 记录已过期
+            await removePersistedTerminal(terminal.id).catch(() => {})
             console.log('[AppBusiness] Restored terminal:', terminal.name, 'for project:', project.name)
           } catch (e) {
             console.warn('[AppBusiness] Failed to restore terminal:', terminal.name, e)
