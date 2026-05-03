@@ -18,12 +18,15 @@ const fileService = new FileService()
 const gitService = new GitService()
 const dbService = getDatabaseService()
 
-registerRoutes(app, { ptyService, projectService, fileService, gitService, dbService }, {
+const { setHttpServer } = registerRoutes(app, { ptyService, projectService, fileService, gitService, dbService }, {
   port: PORT,
   enableWs: true
 })
 
-app.listen(PORT, () => {
+const httpServer = app.listen(PORT, () => {
   console.log(`AITerm backend server running on http://localhost:${PORT}`)
-  console.log(`WebSocket server running on ws://localhost:${PORT + 1}`)
+  console.log(`WebSocket server running on ws://localhost:${PORT}/ws`)
 })
+
+// Attach WS upgrade handler now that we have the HTTP server
+setHttpServer(httpServer)

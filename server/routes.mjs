@@ -5,12 +5,13 @@ import express from 'express'
  * 注册所有 API 路由和 WebSocket
  * @param {import('express').Application} app - Express 应用
  * @param {Object} services - 服务实例 { ptyService, projectService, fileService, gitService, dbService }
- * @param {Object} options - 配置选项 { port, enableWs }
+ * @param {Object} options - 配置选项 { port, enableWs, httpServer }
  */
 export function registerRoutes(app, services, options = {}) {
   const { ptyService, projectService, fileService, gitService, dbService } = services
   const port = options.port || 5001
   const enableWs = options.enableWs !== false
+  const httpServer = options.httpServer || null
 
   // ========== 中间件 ==========
   app.use(express.json())
@@ -85,6 +86,7 @@ export function registerRoutes(app, services, options = {}) {
     try {
       const { name, path, group } = req.body
       const project = projectService.addProject(name, path, group)
+      broadcastToWs(JSON.stringify({ type: 'state_changed', entity: 'projects' }))
       res.json(project)
     } catch (e) {
       res.status(500).json({ error: e.message })
@@ -95,6 +97,10 @@ export function registerRoutes(app, services, options = {}) {
     try {
       const { id } = req.params
       await projectService.removeProject(id)
+      // 级联删除：清除该项目下的所有终端和编辑器
+      dbService.deleteTerminalsByProject(id)
+      dbService.clearEditors(id)
+      broadcastToWs(JSON.stringify({ type: 'state_changed', entity: 'projects' }))
       res.json({ success: true })
     } catch (e) {
       res.status(500).json({ error: e.message })
@@ -106,6 +112,7 @@ export function registerRoutes(app, services, options = {}) {
       const { id } = req.params
       const { newName } = req.body
       const project = projectService.renameProject(id, newName)
+      broadcastToWs(JSON.stringify({ type: 'state_changed', entity: 'projects' }))
       res.json(project)
     } catch (e) {
       res.status(500).json({ error: e.message })
@@ -487,20 +494,21 @@ export function registerRoutes(app, services, options = {}) {
         for (const p of projects) {
           const existing = dbService.getProject(p.id)
           if (existing) {
-            const stmt = dbService.db.prepare('UPDATE projects SET name = ?, path = ?, "order" = ? WHERE id = ?')
-            stmt.run(p.name, p.path, p.order || 0, p.id)
+            dbService.updateProject(p.id, p.name, p.path, p.order || 0)
           } else {
             dbService.addProject(p.id, p.name, p.path, p.order || 0)
           }
         }
       }
       if (terminals && Array.isArray(terminals)) {
-        const currentTerminals = dbService.getAllTerminals()
-        for (const t of currentTerminals) {
-          dbService.removeTerminal(t.id)
-        }
+        // 精确 upsert — 不做 DELETE ALL，避免竞态
         for (const t of terminals) {
-          dbService.addTerminal(t.id, t.name, t.cwd || '', t.taskSlug || null, t.projectId || null)
+          const existing = dbService.getTerminal(t.id)
+          if (existing) {
+            dbService.updateTerminal(t.id, { name: t.name, cwd: t.cwd, projectId: t.projectId })
+          } else {
+            dbService.addTerminal(t.id, t.name, t.cwd || '', t.taskSlug || null, t.projectId || null)
+          }
         }
       }
       if (editors && Array.isArray(editors)) {
@@ -518,6 +526,7 @@ export function registerRoutes(app, services, options = {}) {
     try {
       const { id, name, cwd, taskSlug, projectId } = req.body
       const terminal = dbService.addTerminal(id, name, cwd, taskSlug, projectId)
+      broadcastToWs(JSON.stringify({ type: 'state_changed', entity: 'terminals' }))
       res.json(terminal)
     } catch (e) {
       res.status(500).json({ error: e.message })
@@ -529,6 +538,7 @@ export function registerRoutes(app, services, options = {}) {
       const { id } = req.params
       const updates = req.body
       dbService.updateTerminal(id, updates)
+      broadcastToWs(JSON.stringify({ type: 'state_changed', entity: 'terminals' }))
       res.json({ success: true })
     } catch (e) {
       res.status(500).json({ error: e.message })
@@ -539,6 +549,7 @@ export function registerRoutes(app, services, options = {}) {
     try {
       const { id } = req.params
       dbService.removeTerminal(id)
+      broadcastToWs(JSON.stringify({ type: 'state_changed', entity: 'terminals' }))
       res.json({ success: true })
     } catch (e) {
       res.status(500).json({ error: e.message })
@@ -553,6 +564,7 @@ export function registerRoutes(app, services, options = {}) {
           dbService.saveEditor(projectId || e.projectId, e.id, e.path, e.name, e.scrollToLine)
         }
       }
+      broadcastToWs(JSON.stringify({ type: 'state_changed', entity: 'editors' }))
       res.json({ success: true })
     } catch (e) {
       res.status(500).json({ error: e.message })
@@ -563,6 +575,7 @@ export function registerRoutes(app, services, options = {}) {
     try {
       const { projectId, id } = req.params
       dbService.removeEditor(projectId, id)
+      broadcastToWs(JSON.stringify({ type: 'state_changed', entity: 'editors' }))
       res.json({ success: true })
     } catch (e) {
       res.status(500).json({ error: e.message })
@@ -573,7 +586,8 @@ export function registerRoutes(app, services, options = {}) {
   let wss = null
 
   if (enableWs) {
-    wss = new WebSocketServer({ port: port + 1 })
+    // Use noServer mode so WS runs on the same port as HTTP (no separate port)
+    wss = new WebSocketServer({ noServer: true })
 
     wss.on('connection', (ws) => {
       console.log('WebSocket client connected')
@@ -584,6 +598,22 @@ export function registerRoutes(app, services, options = {}) {
         console.log('WebSocket client disconnected')
       })
     })
+
+    // Attach upgrade handler to HTTP server if provided
+    if (httpServer) {
+      httpServer.on('upgrade', (req, socket, head) => {
+        if (req.url === '/ws') {
+          wss.handleUpgrade(req, socket, head, (ws) => {
+            wss.emit('connection', ws, req)
+          })
+        } else {
+          socket.destroy()
+        }
+      })
+      console.log(`[WS] WebSocket attached to HTTP server on same port (ws path: /ws)`)
+    } else {
+      console.warn('[WS] No httpServer provided — WebSocket upgrade will not work until setHttpServer() is called')
+    }
 
     // 转发终端输出到 WebSocket 客户端
     ptyService.on('output', (data) => {
@@ -602,6 +632,23 @@ export function registerRoutes(app, services, options = {}) {
     })
   }
 
+  /**
+   * Attach the HTTP server for WS upgrade after listen() (used by Electron embedded server)
+   */
+  function setHttpServer(server) {
+    if (!wss || !server) return
+    server.on('upgrade', (req, socket, head) => {
+      if (req.url === '/ws') {
+        wss.handleUpgrade(req, socket, head, (ws) => {
+          wss.emit('connection', ws, req)
+        })
+      } else {
+        socket.destroy()
+      }
+    })
+    console.log(`[WS] WebSocket upgrade handler attached via setHttpServer()`)
+  }
+
   function broadcastToWs(message) {
     if (!wss) return
     wss.clients.forEach((client) => {
@@ -611,5 +658,5 @@ export function registerRoutes(app, services, options = {}) {
     })
   }
 
-  return { wss }
+  return { wss, setHttpServer }
 }

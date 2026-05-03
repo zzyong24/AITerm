@@ -488,5 +488,14 @@ export const terminalActivityListener = (callback: (data: { session_id: string; 
   return () => terminalWs.off('activity', callback)
 }
 
+/**
+ * 跨端状态同步：当其他客户端修改了 projects/terminals/editors 时触发
+ * entity: 'projects' | 'terminals' | 'editors'
+ */
+export const stateChangedListener = (callback: (data: { entity: string }) => void) => {
+  terminalWs.on('state_changed', callback)
+  return () => terminalWs.off('state_changed', callback)
+}
+
 // 连接 WebSocket
 terminalWs.connect()

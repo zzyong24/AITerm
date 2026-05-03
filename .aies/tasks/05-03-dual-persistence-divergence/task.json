@@ -1,0 +1,16 @@
+{
+  "slug": "dual-persistence-divergence",
+  "title": "双持久化层ProjectService与SQLite数据不一致",
+  "status": "planning",
+  "priority": "P1",
+  "owner": "moonlitclear",
+  "confirmed": false,
+  "autopilot": false,
+  "created_at": "2026-05-03 19:27:35",
+  "updated_at": "2026-05-03 19:27:35",
+  "commit": "",
+  "parent": null,
+  "children": [],
+  "related_files": [],
+  "notes": ""
+}

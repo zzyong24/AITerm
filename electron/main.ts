@@ -207,6 +207,9 @@ function registerIpcHandlers() {
 
   ipcMain.handle('remove-project', async (_, id: string) => {
     await projectService.removeProject(id)
+    // 级联删除：清除该项目下的所有终端和编辑器
+    dbService.deleteTerminalsByProject(id)
+    dbService.clearEditors(id)
   })
 
   ipcMain.handle('rename-project', async (_, id: string, newName: string) => {
@@ -385,30 +388,27 @@ function registerIpcHandlers() {
   ipcMain.handle('update-full-state', async (_, state: any) => {
     const { projects, terminals, editors } = state
 
-    // 更新 projects
+    // 更新 projects — 使用 updateProject 而非直接操作 db
     if (projects && Array.isArray(projects)) {
       for (const p of projects) {
         const existing = dbService.getProject(p.id)
         if (existing) {
-          const stmt = dbService.db.prepare('UPDATE projects SET name = ?, path = ?, "order" = ? WHERE id = ?')
-          stmt.run(p.name, p.path, p.order || 0, p.id)
+          dbService.updateProject(p.id, p.name, p.path, p.order || 0)
         } else {
           dbService.addProject(p.id, p.name, p.path, p.order || 0)
         }
       }
     }
 
-    // 更新 terminals - 先删除所有，再插入新的（避免累加）
+    // 更新 terminals — 精确 upsert，不做 DELETE ALL
     if (terminals && Array.isArray(terminals)) {
-      // 获取当前所有 terminal IDs
-      const currentTerminals = dbService.getAllTerminals()
-      // 删除所有现有 terminals
-      for (const t of currentTerminals) {
-        dbService.removeTerminal(t.id)
-      }
-      // 插入新 terminals
       for (const t of terminals) {
-        dbService.addTerminal(t.id, t.name, t.cwd || '', t.taskSlug || null, t.projectId || null)
+        const existing = dbService.getTerminal(t.id)
+        if (existing) {
+          dbService.updateTerminal(t.id, { name: t.name, cwd: t.cwd, projectId: t.projectId })
+        } else {
+          dbService.addTerminal(t.id, t.name, t.cwd || '', t.taskSlug || null, t.projectId || null)
+        }
       }
     }
 
@@ -531,7 +531,7 @@ async function startEmbeddedServer() {
 
     // 注册 API 路由（在静态文件之前）
     const registerRoutes = await loadRoutesModule()
-    registerRoutes(expressApp, { ptyService, projectService, fileService, gitService, dbService }, {
+    const { setHttpServer } = registerRoutes(expressApp, { ptyService, projectService, fileService, gitService, dbService }, {
       port: WEB_PORT,
       enableWs: true
     })
@@ -546,6 +546,8 @@ async function startEmbeddedServer() {
 
     embeddedServer = expressApp.listen(WEB_PORT, () => {
       console.log(`[EmbeddedServer] Running on http://localhost:${WEB_PORT}`)
+      // Attach WS upgrade handler now that we have the HTTP server
+      setHttpServer(embeddedServer)
       resolve(embeddedServer)
     })
 

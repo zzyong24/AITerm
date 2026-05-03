@@ -119,6 +119,18 @@ export class DatabaseService {
   }
 
   /**
+   * updateProject 更新项目名称、路径和顺序
+   * @param id 项目 ID
+   * @param name 项目名称
+   * @param path 项目路径
+   * @param order 排序
+   */
+  updateProject(id, name, path, order = 0) {
+    const stmt = this.db.prepare('UPDATE projects SET name = ?, path = ?, "order" = ? WHERE id = ?')
+    stmt.run(name, path, order, id)
+  }
+
+  /**
    * removeProject 删除项目
    * @param id 项目 ID
    */
@@ -228,6 +240,15 @@ export class DatabaseService {
   removeTerminal(id) {
     const stmt = this.db.prepare('DELETE FROM terminals WHERE id = ?')
     stmt.run(id)
+  }
+
+  /**
+   * deleteTerminalsByProject 删除项目下的所有终端（级联删除）
+   * @param projectId 项目 ID
+   */
+  deleteTerminalsByProject(projectId) {
+    const stmt = this.db.prepare('DELETE FROM terminals WHERE projectId = ?')
+    stmt.run(projectId)
   }
 
   // ============ Editors ============
