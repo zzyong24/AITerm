@@ -100,6 +100,7 @@ export function registerRoutes(app, services, options = {}) {
       await projectService.removeProject(id)
       // 级联删除：清除该项目下的所有终端和编辑器
       dbService.deleteTerminalsByProject(id)
+      dbService.removeProject(id)
       dbService.clearEditors(id)
       res.json({ success: true })
     } catch (e) {

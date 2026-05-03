@@ -272,10 +272,10 @@ class AppBusinessClass {
     await apiRemoveProject(id)
     this.projects = this.projects.filter(p => p.id !== id)
     this.notifyProjectsChange()
-    // 从 SQLite 中移除项目（软删除：更新 lastAccessedAt 不再包含该 ID）
+    // CLEANUP: Immediately sync to SQLite instead of using debounced scheduler
+    // This ensures the project removal is persisted immediately and consistently
     try {
-      // 通过批量更新移除项目 - 在下次 sync 时会排除
-      this.scheduleSyncProjectsToSQLite()
+      await this.syncProjectsToSQLite()
     } catch (e) {
       console.error('[AppBusiness] Failed to sync project removal to SQLite:', e)
     }
@@ -559,12 +559,22 @@ class AppBusinessClass {
     // 如果有从 SQLite 加载的终端数据，使用它而不是调 API
     if (this.persistedTerminals.length > 0) {
       console.log('[AppBusiness] Restoring terminals from SQLite:', this.persistedTerminals.length)
+      // BUG FIX #2: Add deduplication check to prevent exponential duplication
+      // Keep track of already-restored terminals to prevent restoring the same terminal twice
+      const restoredSessionIds = new Set<string>()
       for (const terminal of this.persistedTerminals) {
+        // Skip if this terminal's ID is already active/restored
+        if (this.sessions.some(s => s.id === terminal.id)) {
+          console.log('[AppBusiness] Terminal already active, skipping:', terminal.id)
+          restoredSessionIds.add(terminal.id)
+          continue
+        }
         // 找到对应的项目
         const project = this.projects.find(p => p.id === terminal.projectId)
         if (project) {
           try {
             const sessionId = await this.launchTerminal(project.id, project.name, terminal.cwd)
+            restoredSessionIds.add(sessionId)
             if (terminal.name && terminal.name !== project.name) {
               this.renameSession(sessionId, terminal.name)
             }

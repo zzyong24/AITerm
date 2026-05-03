@@ -49,6 +49,7 @@ export class DatabaseService extends EventEmitter {
         cwd TEXT NOT NULL,
         taskSlug TEXT,
         history TEXT DEFAULT '[]',
+        status TEXT DEFAULT 'active',
         createdAt TEXT DEFAULT (datetime('now')),
         lastActiveAt TEXT DEFAULT (datetime('now'))
       )
@@ -56,6 +57,12 @@ export class DatabaseService extends EventEmitter {
     // 迁移：添加 projectId 列（如果不存在）
     try {
       this.db.exec("ALTER TABLE terminals ADD COLUMN projectId TEXT")
+    } catch (e) {
+      // 列已存在，忽略
+    }
+    // 迁移：添加 status 列用于跟踪终端生命周期状态（如果不存在）
+    try {
+      this.db.exec("ALTER TABLE terminals ADD COLUMN status TEXT DEFAULT 'active'")
     } catch (e) {
       // 列已存在，忽略
     }
