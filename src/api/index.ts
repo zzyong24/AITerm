@@ -58,6 +58,7 @@ export const openExternal = api.openExternal
 export const terminalOutputListener = api.terminalOutputListener
 export const terminalClosedListener = api.terminalClosedListener
 export const terminalActivityListener = api.terminalActivityListener
+export const terminalRenamedListener = api.terminalRenamedListener
 export const stateChangedListener = api.stateChangedListener
 export const terminalWs = api.terminalWs
 export const windowMinimize = api.windowMinimize

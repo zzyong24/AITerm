@@ -49,15 +49,7 @@ export interface TerminalSession {
   activeSubId: string | null
 }
 
-// 使用 window.electronAPI (通过 preload 暴露)
-declare global {
-  interface Window {
-    electronAPI: {
-      invoke: (channel: string, ...args: any[]) => Promise<any>
-      on: (channel: string, callback: (data: any) => void) => () => void
-    }
-  }
-}
+// 使用 window.electronAPI (通过 preload 暴露，类型定义见 src/vite-env.d.ts)
 
 // 终端相关
 export const createTerminalSession = (projectId: string | null, projectName: string | null, workingDir?: string) =>
@@ -275,6 +267,12 @@ export const watcherUnlinkDirListener = (callback: (data: WatcherEvent) => void)
 }
 
 // 跨端持久化 API（SQLite）- Electron IPC 模式存根
+export interface HistoryEntry {
+  type: 'input' | 'output'
+  content: string
+  timestamp: number
+}
+
 export interface PersistedState {
   projects: Array<{ id: string; name: string; path: string; order?: number; createdAt?: string; lastAccessedAt?: string }>
   terminals: Array<{ id: string; name: string; cwd: string; taskSlug?: string; history?: HistoryEntry[]; createdAt?: string; lastActiveAt?: string }>
@@ -287,14 +285,27 @@ export const getFullState = (): Promise<PersistedState> =>
 export const updateFullState = (state: Partial<PersistedState>) =>
   window.electronAPI.invoke('update-full-state', state)
 
-export const persistTerminal = (id: string, name: string, cwd: string, taskSlug?: string) =>
-  window.electronAPI.invoke('persist-terminal', id, name, cwd, taskSlug)
+export const persistTerminal = (id: string, name: string, cwd: string, taskSlug?: string | null, projectId?: string | null) =>
+  window.electronAPI.invoke('persist-terminal', id, name, cwd, taskSlug, projectId)
 
 export const updatePersistedTerminal = (id: string, updates: { name?: string; cwd?: string; taskSlug?: string; history?: HistoryEntry[] }) =>
   window.electronAPI.invoke('update-persisted-terminal', id, updates)
 
 export const removePersistedTerminal = (id: string) =>
   window.electronAPI.invoke('remove-persisted-terminal', id)
+
+// 终端重命名（IPC 模式）
+export const renameTerminal = (sessionId: string, name: string) =>
+  window.electronAPI.invoke<{ success: boolean; name: string }>('rename-terminal-session', sessionId, name)
+
+// terminal-renamed WS 事件 stub（IPC 模式下通过 IPC 接收，不用 WS）
+export const terminalRenamedListener = (_callback: (data: { sessionId: string; name: string }) => void) => {
+  return () => {}
+}
+
+// clearTerminals IPC stub（通过 IPC channel 调用）
+export const clearTerminals = (projectPath: string) =>
+  window.electronAPI.invoke('clear-terminals', projectPath)
 
 export const updateEditors = (editors: { projectId: string; id: string; path: string; name: string; scrollToLine?: number }[]) =>
   window.electronAPI.invoke('update-editors', editors)
@@ -330,3 +341,13 @@ export const saveTerminals = (projectPath: string, terminals: TerminalData[]) =>
 
 export const loadTerminals = (projectPath: string): Promise<TerminalData[]> =>
   window.electronAPI.invoke<TerminalData[]>('load-terminals', projectPath)
+
+// 终端历史（IPC 模式通过 IPC 转发）
+export const saveTerminalHistory = (projectPath: string, workingDir: string, entries: HistoryEntry[]) =>
+  window.electronAPI.invoke('save-terminal-history', projectPath, workingDir, entries)
+
+export const loadTerminalHistory = (projectPath: string, workingDir: string): Promise<HistoryEntry[]> =>
+  window.electronAPI.invoke<HistoryEntry[]>('load-terminal-history', projectPath, workingDir)
+
+export const clearTerminalHistory = (projectPath: string, workingDir: string) =>
+  window.electronAPI.invoke('clear-terminal-history', projectPath, workingDir)
