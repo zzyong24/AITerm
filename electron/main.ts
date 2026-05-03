@@ -209,6 +209,7 @@ function registerIpcHandlers() {
     await projectService.removeProject(id)
     // 级联删除：清除该项目下的所有终端和编辑器
     dbService.deleteTerminalsByProject(id)
+    dbService.removeProject(id)   // BUG-FIX: 从 SQLite 中删除 project 记录，防止刷新后幽灵复原
     dbService.clearEditors(id)
   })
 
