@@ -135,6 +135,14 @@ class AppBusinessClass {
   // 从 SQLite 加载的终端数据（供 restoreAllTerminals 使用）
   persistedTerminals: any[] = []
 
+  // ============ 跨端同步防护 ============
+  /** 本地初始化/恢复期间设为 true，屏蔽自身触发的 state_changed 回声 */
+  private isSyncing = false
+  /** stateChangedListener 的取消订阅函数，保证只注册一次 */
+  private stateChangedUnsubscribe: (() => void) | null = null
+  /** syncRemoteSessions 防抖 timer */
+  private syncRemoteDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
   // 活跃度数据
   activityData: Record<string, { last: number; bytes: number }> = {}
 
@@ -433,53 +441,61 @@ class AppBusinessClass {
       }
 
       // Step 6: 监听跨端 state_changed 事件，自动刷新本地状态
-      stateChangedListener(({ entity }) => {
-        console.log('[AppBusiness] Remote state_changed:', entity)
-        if (entity === 'projects') {
-          apiGetProjects().then(projects => {
-            this.projects = projects
-            this.notifyProjectsChange()
-          }).catch(e => console.error('[CrossSync] Failed to refresh projects:', e))
-        } else if (entity === 'terminals') {
-          // 跨端同步：采用远端已存在的 PTY sessions，不创建新进程
-          this.syncRemoteSessions().catch(e => console.error('[CrossSync] syncRemoteSessions failed:', e))
-        } else if (entity === 'editors') {
-          // 刷新当前所有项目的 editors（pid 是 projectId UUID，需查表得到 path）
-          const projectIds = [...new Set(this.editors.map(e => e.projectId))]
-          for (const pid of projectIds) {
-            const project = this.projects.find(p => p.id === pid)
-            const projectPath = project?.path ?? (pid ?? '')  // fallback: 若查不到则用原值
-            if (!projectPath) continue
-            apiLoadEditors(projectPath).then(persistedEditors => {
-              // 合并持久化字段与内存中运行时字段（content/modified/projectName）
-              const merged: EditorTab[] = persistedEditors.map(pe => {
-                const existing = this.editors.find(e => e.id === pe.id && e.projectId === pid)
-                return {
-                  projectId: pid,
-                  projectName: existing?.projectName ?? project?.name ?? null,
-                  path: pe.path,
-                  id: pe.id,
-                  name: pe.name,
-                  content: existing?.content ?? '',
-                  modified: existing?.modified ?? false,
-                  scrollToLine: pe.scrollToLine,
-                }
-              })
-              this.editors = this.editors.filter(e => e.projectId !== pid).concat(merged)
-              this.notifyEditorsChange()
-            }).catch(e => console.error('[CrossSync] Failed to refresh editors:', e))
+      // 只注册一次——防止 React StrictMode / Vite HMR 多次调用 initialize() 时监听器累积
+      if (!this.stateChangedUnsubscribe) {
+        this.stateChangedUnsubscribe = stateChangedListener(({ entity }) => {
+          // 本地恢复/初始化期间产生的写操作会广播回来，直接忽略，避免回声循环
+          if (this.isSyncing) {
+            console.log('[AppBusiness] state_changed ignored (isSyncing):', entity)
+            return
           }
-        } else if (entity === 'settings') {
-          // 刷新本地设置（字体大小、编辑器路径）
-          Promise.all([apiGetEditorPath(), apiGetTerminalFontSize()])
-            .then(([editorPath, fontSize]) => {
-              this.editorPath = editorPath || ''
-              this.terminalFontSize = fontSize || 14
-              this.notifySettingsChange()
-            })
-            .catch(e => console.error('[CrossSync] Failed to refresh settings:', e))
-        }
-      })
+          console.log('[AppBusiness] Remote state_changed:', entity)
+          if (entity === 'projects') {
+            apiGetProjects().then(projects => {
+              this.projects = projects
+              this.notifyProjectsChange()
+            }).catch(e => console.error('[CrossSync] Failed to refresh projects:', e))
+          } else if (entity === 'terminals') {
+            // 跨端同步：防抖后采用远端已存在的 PTY sessions，不创建新进程
+            this.debouncedSyncRemoteSessions()
+          } else if (entity === 'editors') {
+            // 刷新当前所有项目的 editors（pid 是 projectId UUID，需查表得到 path）
+            const projectIds = [...new Set(this.editors.map(e => e.projectId))]
+            for (const pid of projectIds) {
+              const project = this.projects.find(p => p.id === pid)
+              const projectPath = project?.path ?? (pid ?? '')  // fallback: 若查不到则用原值
+              if (!projectPath) continue
+              apiLoadEditors(projectPath).then(persistedEditors => {
+                // 合并持久化字段与内存中运行时字段（content/modified/projectName）
+                const merged: EditorTab[] = persistedEditors.map(pe => {
+                  const existing = this.editors.find(e => e.id === pe.id && e.projectId === pid)
+                  return {
+                    projectId: pid,
+                    projectName: existing?.projectName ?? project?.name ?? null,
+                    path: pe.path,
+                    id: pe.id,
+                    name: pe.name,
+                    content: existing?.content ?? '',
+                    modified: existing?.modified ?? false,
+                    scrollToLine: pe.scrollToLine,
+                  }
+                })
+                this.editors = this.editors.filter(e => e.projectId !== pid).concat(merged)
+                this.notifyEditorsChange()
+              }).catch(e => console.error('[CrossSync] Failed to refresh editors:', e))
+            }
+          } else if (entity === 'settings') {
+            // 刷新本地设置（字体大小、编辑器路径）
+            Promise.all([apiGetEditorPath(), apiGetTerminalFontSize()])
+              .then(([editorPath, fontSize]) => {
+                this.editorPath = editorPath || ''
+                this.terminalFontSize = fontSize || 14
+                this.notifySettingsChange()
+              })
+              .catch(e => console.error('[CrossSync] Failed to refresh settings:', e))
+          }
+        })
+      }
 
       // BUG-04: 订阅远端 terminal-renamed 事件，立即更新 Tab 标签，无需等全量 state reload
       terminalRenamedListener(({ sessionId, name }) => {
@@ -562,30 +578,37 @@ class AppBusinessClass {
       // BUG FIX #2: Add deduplication check to prevent exponential duplication
       // Keep track of already-restored terminals to prevent restoring the same terminal twice
       const restoredSessionIds = new Set<string>()
-      for (const terminal of this.persistedTerminals) {
-        // Skip if this terminal's ID is already active/restored
-        if (this.sessions.some(s => s.id === terminal.id)) {
-          console.log('[AppBusiness] Terminal already active, skipping:', terminal.id)
-          restoredSessionIds.add(terminal.id)
-          continue
-        }
-        // 找到对应的项目
-        const project = this.projects.find(p => p.id === terminal.projectId)
-        if (project) {
-          try {
-            const sessionId = await this.launchTerminal(project.id, project.name, terminal.cwd)
-            restoredSessionIds.add(sessionId)
-            if (terminal.name && terminal.name !== project.name) {
-              this.renameSession(sessionId, terminal.name)
+
+      // 设置 isSyncing = true，屏蔽 launchTerminal + removePersistedTerminal 触发的 state_changed 回声
+      this.isSyncing = true
+      try {
+        for (const terminal of this.persistedTerminals) {
+          // Skip if this terminal's ID is already active/restored
+          if (this.sessions.some(s => s.id === terminal.id)) {
+            console.log('[AppBusiness] Terminal already active, skipping:', terminal.id)
+            restoredSessionIds.add(terminal.id)
+            continue
+          }
+          // 找到对应的项目
+          const project = this.projects.find(p => p.id === terminal.projectId)
+          if (project) {
+            try {
+              const sessionId = await this.launchTerminal(project.id, project.name, terminal.cwd)
+              restoredSessionIds.add(sessionId)
+              if (terminal.name && terminal.name !== project.name) {
+                this.renameSession(sessionId, terminal.name)
+              }
+              // BUG-FIX: 删除旧的 persisted 记录，防止每次刷新翻倍
+              // launchTerminal 已经用新 sessionId 写入 SQLite，旧 terminal.id 记录已过期
+              await removePersistedTerminal(terminal.id).catch(() => {})
+              console.log('[AppBusiness] Restored terminal:', terminal.name, 'for project:', project.name)
+            } catch (e) {
+              console.warn('[AppBusiness] Failed to restore terminal:', terminal.name, e)
             }
-            // BUG-FIX: 删除旧的 persisted 记录，防止每次刷新翻倍
-            // launchTerminal 已经用新 sessionId 写入 SQLite，旧 terminal.id 记录已过期
-            await removePersistedTerminal(terminal.id).catch(() => {})
-            console.log('[AppBusiness] Restored terminal:', terminal.name, 'for project:', project.name)
-          } catch (e) {
-            console.warn('[AppBusiness] Failed to restore terminal:', terminal.name, e)
           }
         }
+      } finally {
+        this.isSyncing = false
       }
       return
     }
@@ -830,6 +853,20 @@ class AppBusinessClass {
     if (hasNew) {
       console.log('[AppBusiness] syncRemoteSessions: adopted new sessions, count=', remoteSessions.length)
     }
+  }
+
+  /**
+   * 防抖版 syncRemoteSessions：300ms 内的多次 state_changed(terminals) 合并为一次调用。
+   * 防止 restoreAllTerminals 期间 N 个写操作产生 N 个并发 HTTP 请求。
+   */
+  private debouncedSyncRemoteSessions() {
+    if (this.syncRemoteDebounceTimer) {
+      clearTimeout(this.syncRemoteDebounceTimer)
+    }
+    this.syncRemoteDebounceTimer = setTimeout(() => {
+      this.syncRemoteDebounceTimer = null
+      this.syncRemoteSessions().catch(e => console.error('[CrossSync] syncRemoteSessions failed:', e))
+    }, 300)
   }
 
   // ============ 终端列表保存/恢复 ============
