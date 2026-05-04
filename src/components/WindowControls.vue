@@ -7,6 +7,15 @@
           <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
         </svg>
       </button>
+      <button class="tool-btn tool-btn--danger" @click="showClearStateConfirm = true" title="清空所有数据（关闭全部项目和文档）">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="3 6 5 6 21 6" />
+          <path d="M19 6l-1 14H6L5 6" />
+          <path d="M10 11v6M14 11v6" />
+          <path d="M9 6V4h6v2" />
+        </svg>
+        <span>清空</span>
+      </button>
       <button class="tool-btn" @click="showKillPortModal = true" title="终止端口进程">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="10" />
@@ -36,6 +45,26 @@
           <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.2" />
         </svg>
       </button>
+    </div>
+
+    <!-- 清空状态确认对话框 -->
+    <div v-if="showClearStateConfirm" class="modal-overlay" @click="showClearStateConfirm = false">
+      <div class="modal" @click.stop>
+        <div class="modal-header">
+          <span>清空所有数据</span>
+          <button class="modal-close" @click="showClearStateConfirm = false">×</button>
+        </div>
+        <div class="modal-body">
+          <p>将关闭所有项目和文档，并清空 SQLite 中的全部持久化记录。</p>
+          <p class="close-warning">此操作不可撤销，所有项目列表、终端记录和编辑器记录将被删除。</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-cancel" @click="showClearStateConfirm = false">取消</button>
+          <button class="btn-confirm btn-close" :disabled="isClearingState" @click="handleClearAllState">
+            {{ isClearingState ? '清空中...' : '确认清空' }}
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Kill Port Modal -->
@@ -86,7 +115,6 @@
 import { defineComponent } from 'vue'
 import { windowMinimize, windowMaximize, windowClose, windowIsMaximized, killPort, getOpenTerminalsCount } from '../api'
 import { appBusiness } from '../store/AppBusiness'
-
 export default defineComponent({
   name: 'WindowControls',
 
@@ -96,7 +124,9 @@ export default defineComponent({
       showKillPortModal: false,
       killPortInput: '',
       showCloseConfirm: false,
-      openTerminalsCount: 0
+      openTerminalsCount: 0,
+      showClearStateConfirm: false,
+      isClearingState: false
     }
   },
 
@@ -145,6 +175,19 @@ export default defineComponent({
 
     handleRefreshProjects() {
       appBusiness.refreshProjects()
+    },
+
+    async handleClearAllState() {
+      if (this.isClearingState) return
+      this.isClearingState = true
+      try {
+        await appBusiness.clearAllState()
+        this.showClearStateConfirm = false
+      } catch (e) {
+        console.error('[WindowControls] clearAllState failed:', e)
+      } finally {
+        this.isClearingState = false
+      }
     },
 
     async handleKillPort() {
@@ -205,6 +248,17 @@ export default defineComponent({
 .tool-btn:hover {
   background: #3e3e42;
   border-color: #007acc;
+}
+
+.tool-btn--danger {
+  border-color: #5a2020;
+  color: #e07070;
+}
+
+.tool-btn--danger:hover {
+  background: #3e2020;
+  border-color: #c42b1c;
+  color: #ff8080;
 }
 
 .tool-btn svg {

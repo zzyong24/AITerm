@@ -351,3 +351,6 @@ export const loadTerminalHistory = (projectPath: string, workingDir: string): Pr
 
 export const clearTerminalHistory = (projectPath: string, workingDir: string) =>
   window.electronAPI.invoke('clear-terminal-history', projectPath, workingDir)
+
+export const clearAllState = (): Promise<{ success: boolean }> =>
+  window.electronAPI.invoke('clear-all-state')
