@@ -1,0 +1,2 @@
+{"phase": "implement", "spec": "architecture.md", "reason": "file-tree-not-update 涉及目录 watch 事件到 Vue 组件的传递链路"}
+{"phase": "implement", "spec": "guides/cross-layer.md", "reason": "目录变更事件需经 AppBusiness 层通知，不可绕过直接触发 UI"}

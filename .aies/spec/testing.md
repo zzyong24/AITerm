@@ -84,6 +84,69 @@ npm run test -- --watch
 
 ---
 
+## Vitest 环境配置
+
+### ✅ 必须：vitest 环境设为 `node`
+
+```ts
+// vite.config.ts / vitest.config.ts
+export default defineConfig({
+  test: {
+    environment: 'node',  // ← 必须，不能用默认 'jsdom'
+  }
+})
+```
+
+**原因**：`html-encoding-sniffer`（`whatwg-url` 依赖链）仅支持 ESM，在 `jsdom` 环境下会报
+`SyntaxError: The requested module … does not provide an export named 'default'`。
+设为 `node` 后 Vitest 不加载 jsdom，可以正常跑 AppBusiness 单元测试。
+
+---
+
+## E2E 条件跳过（Playwright）
+
+### 规则：基础设施不可用时必须 skip，不能直接报错
+
+**场景**：测试依赖 Electron（端口 5003）、外部服务、或只在打包环境才有的功能。
+
+```typescript
+test('AC-01: 某部署测试', async ({ page }) => {
+  // ✅ 先探针，不可达则跳过
+  const ctx = await request.newContext()
+  const reachable = await ctx
+    .get('http://localhost:5003', { timeout: 3000 })
+    .then(() => true)
+    .catch(() => false)
+  await ctx.dispose()
+
+  if (!reachable) {
+    test.skip(true, 'Port 5003 not reachable — Electron app not running, skipping')
+    return  // ← 必须 return，test.skip 不会自动中断
+  }
+
+  // ... 实际测试逻辑
+})
+```
+
+❌ 错误：直接 `page.goto('http://localhost:5003')` → `ERR_CONNECTION_REFUSED` → 测试报错
+
+---
+
+## Native 模块版本匹配
+
+### 规则：Node.js 版本变更后必须 rebuild
+
+当出现 `NODE_MODULE_VERSION mismatch`（如 `better-sqlite3` 编译版本与运行时不一致）：
+
+```bash
+npm rebuild better-sqlite3
+```
+
+**背景**：`better-sqlite3` 是 Node.js native addon，绑定到编译时的 Node.js ABI 版本。
+升级/切换 Node.js 版本后必须重新编译，否则所有测试在 require 阶段就会 crash。
+
+---
+
 ## 覆盖率要求
 
 | 类型 | 最低要求 |

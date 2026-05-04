@@ -1,0 +1,2 @@
+{"phase": "implement", "spec": "code-style.md", "reason": "终端 rename 持久化涉及命名规范和 AppBusiness 状态更新模式"}
+{"phase": "implement", "spec": "architecture.md", "reason": "rename 需同时更新内存状态和 SQLite 持久层，确认层职责"}

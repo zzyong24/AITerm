@@ -1,0 +1,2 @@
+{"phase": "research", "spec": "architecture.md", "reason": "了解 Electron IPC 与 WebSocket 两条路径的 session 传递机制"}
+{"phase": "implement", "spec": "guides/cross-layer.md", "reason": "Electron 主进程 session 事件需通过正确层传递到 WS 广播"}

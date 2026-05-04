@@ -425,6 +425,8 @@ def cmd_list_archive(_args: argparse.Namespace) -> int:
             continue
         print(f"\n## {m.name}")
         for t in sorted(m.iterdir()):
+            if not t.is_dir():
+                continue
             data = _load_task(t / "task.json")
             print(f"  - {t.name}: {data.get('title', '')}")
     return 0

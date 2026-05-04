@@ -1,0 +1,2 @@
+{"phase": "research", "spec": "architecture.md", "reason": "梳理 IPC 和 HTTP 两条写入路径，确认 state_changed 广播缺口"}
+{"phase": "implement", "spec": "guides/cross-layer.md", "reason": "IPC 写入后需经由服务层统一 emit，不可绕过广播层"}

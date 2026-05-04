@@ -1,0 +1,2 @@
+{"phase": "implement", "spec": "architecture.md", "reason": "DatabaseService.setSetting 写入后缺少 emit，导致 WS 广播无源头"}
+{"phase": "implement", "spec": "error-handling.md", "reason": "setSetting 错误需正确上抛，不能静默吞掉"}

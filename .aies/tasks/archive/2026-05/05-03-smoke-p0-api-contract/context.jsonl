@@ -1,0 +1,2 @@
+{"phase": "implement", "spec": "architecture.md", "reason": "修复 IPC/HTTP API 签名不一致，renameTerminal 等方法缺失"}
+{"phase": "implement", "spec": "code-style.md", "reason": "electron-ipc.ts 补全缺失方法，命名与 HTTP 版本保持一致"}

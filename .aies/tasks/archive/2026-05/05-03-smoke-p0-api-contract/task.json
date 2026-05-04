@@ -1,0 +1,16 @@
+{
+  "slug": "smoke-p0-api-contract",
+  "title": "P0 冒烟修复：API 契约断层（3 个 bug）",
+  "status": "completed",
+  "priority": "P0",
+  "owner": "moonlitclear",
+  "confirmed": true,
+  "autopilot": false,
+  "created_at": "2026-05-03",
+  "updated_at": "2026-05-03",
+  "commit": "",
+  "parent": null,
+  "children": [],
+  "related_files": [],
+  "notes": "retroactively patched — task.json and context.jsonl were missing at archive time"
+}

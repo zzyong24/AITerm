@@ -1,0 +1,2 @@
+{"phase": "implement", "spec": "architecture.md", "reason": "Activity Bar 折叠面板涉及组件层与 AppBusiness 事件通信"}
+{"phase": "implement", "spec": "code-style.md", "reason": "新增 Vue 组件命名与事件命名需符合项目规范"}

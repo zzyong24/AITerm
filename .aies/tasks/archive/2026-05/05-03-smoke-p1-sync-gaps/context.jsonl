@@ -1,0 +1,2 @@
+{"phase": "implement", "spec": "architecture.md", "reason": "浏览器端补 terminal-renamed WS 监听，renameProject 补 HTTP API 调用"}
+{"phase": "implement", "spec": "guides/cross-layer.md", "reason": "clearTerminals 在 Electron 模式下为 undefined，需经正确层路由"}

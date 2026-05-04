@@ -1,7 +1,7 @@
 {
   "slug": "terminals-sync-race-condition",
   "title": "终端同步删全重插存在竞态条件",
-  "status": "planning",
+  "status": "completed",
   "priority": "P1",
   "owner": "moonlitclear",
   "confirmed": false,

@@ -1,0 +1,6 @@
+{"phase": "research", "spec": "architecture.md", "reason": "确认现有 session 状态架构，识别 reconcile 代码位置"}
+{"phase": "implement", "spec": "architecture.md", "reason": "服务端 PtyService 广播 sessions_snapshot，确保事件结构符合架构规范"}
+{"phase": "implement", "spec": "code-style.md", "reason": "AppBusiness.ts 新增 onSessionsSnapshot / rebuildTabsFromSessions，遵守命名和注释规范"}
+{"phase": "implement", "spec": "error-handling.md", "reason": "closeSession 乐观 UI + API 失败不回滚，需符合错误处理规范"}
+{"phase": "test", "spec": "testing.md", "reason": "vitest mock 规范、e2e 跳过条件，确保测试独立性"}
+{"phase": "implement", "spec": "guides/cross-layer.md", "reason": "服务端 → 客户端单向数据流，禁止客户端直接写 session 状态"}

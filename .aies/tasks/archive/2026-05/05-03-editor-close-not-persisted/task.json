@@ -1,7 +1,7 @@
 {
   "slug": "editor-close-not-persisted",
   "title": "编辑器关闭操作未持久化到SQLite",
-  "status": "planning",
+  "status": "completed",
   "priority": "P0",
   "owner": "moonlitclear",
   "confirmed": false,

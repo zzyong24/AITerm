@@ -1,7 +1,7 @@
 {
   "slug": "no-cross-client-sync",
   "title": "跨客户端状态变更无广播同步",
-  "status": "planning",
+  "status": "completed",
   "priority": "P0",
   "owner": "moonlitclear",
   "confirmed": false,
