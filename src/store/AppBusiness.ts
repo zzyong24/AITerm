@@ -627,33 +627,44 @@ class AppBusinessClass {
     // 如果有从 SQLite 加载的终端数据，使用它而不是调 API
     if (this.persistedTerminals.length > 0) {
       console.log('[AppBusiness] Restoring terminals from SQLite:', this.persistedTerminals.length)
-      // BUG FIX #2: Add deduplication check to prevent exponential duplication
-      // Keep track of already-restored terminals to prevent restoring the same terminal twice
-      const restoredSessionIds = new Set<string>()
 
-      // 设置 isSyncing = true，屏蔽 launchTerminal + removePersistedTerminal 触发的 state_changed 回声
+      // ★ 关键：先获取当前服务端仍活跃的 PTY sessions
+      // 刷新页面时旧 PTY 可能还在运行，必须 adopt 而非重建，否则每次刷新都翻倍
+      let activeSessions: { id: string; projectId: string | null; workingDir: string; name?: string; projectName?: string | null }[] = []
+      try {
+        activeSessions = await apiListSessions()
+        console.log('[AppBusiness] Active PTY sessions on server:', activeSessions.length, activeSessions.map(s => s.id))
+      } catch (e) {
+        console.warn('[AppBusiness] Failed to list active sessions, will recreate all:', e)
+      }
+      const activeIds = new Set(activeSessions.map(s => s.id))
+
+      // 设置 isSyncing = true，屏蔽 launchTerminal + persistTerminal 触发的 state_changed 回声
       this.isSyncing = true
       try {
         for (const terminal of this.persistedTerminals) {
-          // Skip if this terminal's ID is already active/restored
+          // 已在本地 UI 中则跳过
           if (this.sessions.some(s => s.id === terminal.id)) {
-            console.log('[AppBusiness] Terminal already active, skipping:', terminal.id)
-            restoredSessionIds.add(terminal.id)
+            console.log('[AppBusiness] Terminal already in UI, skipping:', terminal.id)
             continue
           }
-          // 找到对应的项目
           const project = this.projects.find(p => p.id === terminal.projectId)
-          if (project) {
+          if (!project) continue
+
+          if (activeIds.has(terminal.id)) {
+            // ★ PTY 进程仍活跃 → 直接 adopt，不创建新进程，不写 SQLite
+            this.adoptSession(terminal.id, project.id, project.name, terminal.cwd, terminal.name)
+            console.log('[AppBusiness] Adopted existing PTY:', terminal.id, 'for project:', project.name)
+          } else {
+            // PTY 已死（Electron 重启或真正关闭了）→ 才创建新进程
             try {
               const sessionId = await this.launchTerminal(project.id, project.name, terminal.cwd)
-              restoredSessionIds.add(sessionId)
               if (terminal.name && terminal.name !== project.name) {
                 this.renameSession(sessionId, terminal.name)
               }
-              // BUG-FIX: 删除旧的 persisted 记录，防止每次刷新翻倍
-              // launchTerminal 已经用新 sessionId 写入 SQLite，旧 terminal.id 记录已过期
+              // 删除旧 SQLite 记录（launchTerminal 已写入新 sessionId）
               await removePersistedTerminal(terminal.id).catch(() => {})
-              console.log('[AppBusiness] Restored terminal:', terminal.name, 'for project:', project.name)
+              console.log('[AppBusiness] Recreated dead terminal:', terminal.name, 'for project:', project.name)
             } catch (e) {
               console.warn('[AppBusiness] Failed to restore terminal:', terminal.name, e)
             }
@@ -766,10 +777,17 @@ class AppBusinessClass {
     // 从 tabs 中移除对应的 item
     this.tabs = this.tabs.map(tab => {
       const newItems = tab.items.filter(i => i.id !== sessionId)
+      // 只有关闭的是当前激活项时才切换 activeItemId，否则保持不变
+      let newActiveId = tab.activeItemId
+      if (tab.activeItemId === sessionId) {
+        newActiveId = newItems.length > 0 ? newItems[0].id : null
+      } else if (newActiveId && !newItems.find(i => i.id === newActiveId)) {
+        newActiveId = newItems.length > 0 ? newItems[0].id : null
+      }
       return {
         ...tab,
         items: newItems,
-        activeItemId: newItems.length > 0 ? newItems[0].id : null
+        activeItemId: newActiveId
       }
     })
 
@@ -887,11 +905,16 @@ class AppBusinessClass {
   }
 
   /**
-   * 从服务端拉取当前所有 PTY sessions，把本地没有的采用进来。
+   * 从服务端拉取当前所有 PTY sessions，双向对齐本地状态：
+   * 1. 本地没有、服务端有 → adoptSession（采用）
+   * 2. 本地有、服务端没有 → 从本地 UI 状态移除（PTY 已死，不需要再 kill API）
    * 由 stateChangedListener entity=terminals 触发，实现跨端 terminal 同步。
    */
   async syncRemoteSessions() {
     const remoteSessions = await apiListSessions()
+    const remoteIds = new Set(remoteSessions.map(s => s.id))
+
+    // Step 1：采用本地缺失的远端 session
     let hasNew = false
     for (const remote of remoteSessions) {
       if (!this.sessions.find(s => s.id === remote.id)) {
@@ -902,6 +925,31 @@ class AppBusinessClass {
         hasNew = true
       }
     }
+
+    // Step 2：移除本地有、远端没有的 stale session（PTY 已不存在，只清 UI 状态）
+    const staleIds = this.sessions.filter(s => !remoteIds.has(s.id)).map(s => s.id)
+    if (staleIds.length > 0) {
+      console.log('[AppBusiness] syncRemoteSessions: removing stale local sessions', staleIds)
+      for (const staleId of staleIds) {
+        // 不调 API（PTY 已死），直接清理本地 UI 状态
+        this.tabs = this.tabs.map(tab => {
+          const newItems = tab.items.filter(i => i.id !== staleId)
+          return {
+            ...tab,
+            items: newItems,
+            activeItemId: newItems.length > 0 ? newItems[0].id : null
+          }
+        })
+        const idx = this.sessions.findIndex(s => s.id === staleId)
+        if (idx !== -1) this.sessions.splice(idx, 1)
+        delete this.activityData[staleId]
+        delete this.waitingForInput[staleId]
+        delete this.failedSessions[staleId]
+      }
+      this.notifySessionsChange()
+      this.notifyTabsChange()
+    }
+
     if (hasNew) {
       console.log('[AppBusiness] syncRemoteSessions: adopted new sessions, count=', remoteSessions.length)
     }
