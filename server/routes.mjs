@@ -234,6 +234,27 @@ export function registerRoutes(app, services, options = {}) {
     }
   })
 
+  // 清空所有持久化状态（SQLite projects/terminals/editors + projectService 内存）
+  app.post('/api/clear-all-state', async (req, res) => {
+    try {
+      // 1. 清空 SQLite 三张表
+      const projects = dbService.getAllProjects()
+      for (const p of projects) {
+        dbService.clearEditors(p.id)
+        dbService.deleteTerminalsByProject(p.id)
+        dbService.removeProject(p.id)
+      }
+      // 2. 清空 projectService 内存中的项目列表
+      const memProjects = projectService.getProjects()
+      for (const p of memProjects) {
+        await projectService.removeProject(p.id)
+      }
+      res.json({ success: true })
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
   app.post('/api/save-terminal-history', async (req, res) => {
     try {
       const { projectPath, workingDir, entries } = req.body

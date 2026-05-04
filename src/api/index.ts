@@ -39,6 +39,7 @@ export const readFile = api.readFile
 export const writeFile = api.writeFile
 export const pasteFile = api.pasteFile
 export const killPort = api.killPort
+export const clearAllState = api.clearAllState
 export const isGitIgnored = api.isGitIgnored
 export const searchInDirectory = api.searchInDirectory
 export const searchFileContent = api.searchFileContent

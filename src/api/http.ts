@@ -195,6 +195,9 @@ export const killPort = (port: number) =>
     body: JSON.stringify({ port }),
   }).then(res => res.result)
 
+export const clearAllState = (): Promise<{ success: boolean }> =>
+  apiCall<{ success: boolean }>('/clear-all-state', { method: 'POST' })
+
 export const isGitIgnored = (path: string) =>
   apiCall<boolean>('/is-git-ignored', {
     method: 'POST',

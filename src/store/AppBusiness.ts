@@ -30,6 +30,7 @@ import {
   removePersistedTerminal,
   updateEditors,
   removeEditor,
+  clearAllState as apiClearAllState,
   PersistedState
 } from '../api'
 
@@ -296,6 +297,39 @@ class AppBusinessClass {
     } catch (err) {
       console.error('Failed to refresh projects:', err)
     }
+  }
+
+  /**
+   * 清空所有持久化状态 + 重置本地 UI 状态
+   * - 关闭所有 PTY sessions
+   * - 调后端清空 SQLite projects/terminals/editors
+   * - 重置本地 projects/editors/sessions/tabs 为空
+   */
+  async clearAllState(): Promise<void> {
+    console.log('[AppBusiness] clearAllState: starting')
+    // 1. 关闭所有终端 session（防止残留 PTY 进程）
+    const sessions = [...this.sessions]
+    for (const session of sessions) {
+      try {
+        await this.closeSession(session.id)
+      } catch (e) {
+        console.warn('[AppBusiness] clearAllState: closeSession failed', session.id, e)
+      }
+    }
+    // 2. 调后端清空 SQLite
+    await apiClearAllState()
+    // 3. 重置本地状态
+    this.projects = []
+    this.editors = []
+    this.tabs = []
+    this.sessions = []
+    this.persistedTerminals = []
+    this.activeProjectId = 'default'
+    this.notifyProjectsChange()
+    this.notifyEditorsChange()
+    this.notifyTabsChange()
+    this.notifyActiveProjectChange('default')
+    console.log('[AppBusiness] clearAllState: done')
   }
 
   renameProject(id: string, newName: string): Project | null {

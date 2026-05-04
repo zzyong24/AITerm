@@ -396,6 +396,21 @@ function registerIpcHandlers() {
     return await gitService.discardChanges(repoPath, filePath)
   })
 
+  // 清空所有持久化状态（SQLite projects/terminals/editors + projectService 内存）
+  ipcMain.handle('clear-all-state', async () => {
+    const projects = dbService.getAllProjects()
+    for (const p of projects) {
+      dbService.clearEditors(p.id)
+      dbService.deleteTerminalsByProject(p.id)
+      dbService.removeProject(p.id)
+    }
+    const memProjects = projectService.getProjects()
+    for (const p of memProjects) {
+      await projectService.removeProject(p.id)
+    }
+    return { success: true }
+  })
+
   // 跨端持久化 API（SQLite）
   ipcMain.handle('get-full-state', async () => {
     return dbService.getFullState()
