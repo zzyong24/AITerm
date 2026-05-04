@@ -432,8 +432,13 @@ class AppBusinessClass {
       // Step 3: 自动恢复所有项目的终端
       await this.restoreAllTerminals()
 
-      // Step 4: 自动恢复所有项目的编辑器
-      await this.restoreAllEditors()
+      // Step 4: 自动恢复所有项目的编辑器（isSyncing 保护，屏蔽 openEditor 触发的 SQLite 写回声）
+      this.isSyncing = true
+      try {
+        await this.restoreAllEditors()
+      } finally {
+        this.isSyncing = false
+      }
 
       // Step 5: 同步状态到 SQLite（如果从 API 加载的）
       if (!loadedFromSQLite && this.projects.length > 0) {
@@ -459,13 +464,13 @@ class AppBusinessClass {
             // 跨端同步：防抖后采用远端已存在的 PTY sessions，不创建新进程
             this.debouncedSyncRemoteSessions()
           } else if (entity === 'editors') {
-            // 刷新当前所有项目的 editors（pid 是 projectId UUID，需查表得到 path）
-            const projectIds = [...new Set(this.editors.map(e => e.projectId))]
-            for (const pid of projectIds) {
-              const project = this.projects.find(p => p.id === pid)
-              const projectPath = project?.path ?? (pid ?? '')  // fallback: 若查不到则用原值
-              if (!projectPath) continue
-              apiLoadEditors(projectPath).then(persistedEditors => {
+            // 刷新所有已知项目的 editors
+            // 不能只看 this.editors（远端关光某项目后本地 editors 已空，会漏掉同步）
+            // 改为遍历 this.projects，对每个项目独立拉最新列表
+            const refreshProjects = this.projects.filter(p => p.path)
+            for (const project of refreshProjects) {
+              const pid = project.id
+              apiLoadEditors(project.path).then(persistedEditors => {
                 // 合并持久化字段与内存中运行时字段（content/modified/projectName）
                 const merged: EditorTab[] = persistedEditors.map(pe => {
                   const existing = this.editors.find(e => e.id === pe.id && e.projectId === pid)
@@ -480,8 +485,25 @@ class AppBusinessClass {
                     scrollToLine: pe.scrollToLine,
                   }
                 })
+                // 用服务端最新列表替换本地该项目的 editors（含关闭操作的同步）
                 this.editors = this.editors.filter(e => e.projectId !== pid).concat(merged)
+                // 同步清理 tabs 里已不在服务端列表中的 editor 条目
+                const mergedIds = new Set(merged.map(e => e.id))
+                this.tabs = this.tabs.map(tab => {
+                  if (tab.projectId !== pid) return tab
+                  const newItems = tab.items.filter(item =>
+                    item.type !== 'editor' || mergedIds.has(item.id)
+                  )
+                  return {
+                    ...tab,
+                    items: newItems,
+                    activeItemId: newItems.find(i => i.id === tab.activeItemId)
+                      ? tab.activeItemId
+                      : (newItems.length > 0 ? newItems[newItems.length - 1].id : null)
+                  }
+                })
                 this.notifyEditorsChange()
+                this.notifyTabsChange()
               }).catch(e => console.error('[CrossSync] Failed to refresh editors:', e))
             }
           } else if (entity === 'settings') {
@@ -1144,8 +1166,8 @@ class AppBusinessClass {
     this.activeProjectId = projectId
     this.notifyActiveProjectChange(projectId)
     this.notifyTabsChange()
-    // 保存编辑器列表
-    if (projectId) {
+    // 保存编辑器列表（恢复阶段跳过，避免触发 SQLite 写 → 广播回声）
+    if (projectId && !this.isSyncing) {
       this.scheduleSaveEditors(projectId)
     }
 
