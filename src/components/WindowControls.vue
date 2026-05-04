@@ -100,7 +100,7 @@
             即将关闭所有打开的终端 ({{ openTerminalsCount }} 个)。
           </p>
           <p>确定要关闭 AITerm 吗？</p>
-          <p class="close-warning">关闭后，所有终端会话将被终止。</p>
+          <p class="close-warning">终端会话将在下次启动时自动恢复。</p>
         </div>
         <div class="modal-footer">
           <button class="btn-cancel" @click="showCloseConfirm = false">取消</button>
@@ -149,21 +149,11 @@ export default defineComponent({
       this.showCloseConfirm = true
     },
 
-    async confirmClose() {
+    confirmClose() {
       this.showCloseConfirm = false
-      // 先关闭所有终端会话
-      try {
-        const sessions = [...appBusiness.sessions]
-        console.log('[WindowControls] confirmClose: closing sessions', { count: sessions.length })
-        for (const session of sessions) {
-          console.log('[WindowControls] closing session:', session.id)
-          await appBusiness.closeSession(session.id)
-        }
-        console.log('[WindowControls] confirmClose: all sessions closed')
-      } catch (e) {
-        console.error('[WindowControls] confirmClose: error closing sessions:', e)
-      }
-      // 然后关闭窗口
+      // 直接关闭窗口，PTY 进程由 electron/main.ts before-quit 的 ptyService.closeAll() 统一处理。
+      // ❌ 不在这里调 closeSession()：那会把 SQLite 的终端记录删掉，
+      //    导致下次启动 restoreAllTerminals() 找不到记录，终端无法恢复。
       windowClose()
     },
 

@@ -99,7 +99,8 @@ function createWindow() {
       preload: join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: false,
+      webviewTag: true  // 允许 BrowserView.vue 使用 <webview> 内嵌外部网页（iframe 无法绕过 X-Frame-Options）
     }
   })
 

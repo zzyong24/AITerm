@@ -1,0 +1,2 @@
+{"phase": "research", "spec": "browser-embedding.md", "reason": "调研 Terminal 浏览器内嵌和白屏原因"}
+{"phase": "implement", "spec": "terminal.md", "reason": "修复浏览器组件渲染问题"}
