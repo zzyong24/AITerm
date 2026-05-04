@@ -7,7 +7,7 @@
           <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
         </svg>
       </button>
-      <button class="tool-btn tool-btn--danger" @click="showClearStateConfirm = true" title="清空所有数据（关闭全部项目和文档）">
+      <button class="tool-btn tool-btn--danger" @click="showClearStateConfirm = true" title="清空终端和编辑器记录（保留项目列表）">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="3 6 5 6 21 6" />
           <path d="M19 6l-1 14H6L5 6" />
@@ -51,12 +51,12 @@
     <div v-if="showClearStateConfirm" class="modal-overlay" @click="showClearStateConfirm = false">
       <div class="modal" @click.stop>
         <div class="modal-header">
-          <span>清空所有数据</span>
+          <span>清空终端和编辑器记录</span>
           <button class="modal-close" @click="showClearStateConfirm = false">×</button>
         </div>
         <div class="modal-body">
-          <p>将关闭所有项目和文档，并清空 SQLite 中的全部持久化记录。</p>
-          <p class="close-warning">此操作不可撤销，所有项目列表、终端记录和编辑器记录将被删除。</p>
+          <p>将关闭所有运行中的终端，并清空 SQLite 中的终端和编辑器记录。</p>
+          <p class="close-warning">此操作不可撤销，项目列表不受影响。</p>
         </div>
         <div class="modal-footer">
           <button class="btn-cancel" @click="showClearStateConfirm = false">取消</button>

@@ -300,10 +300,10 @@ class AppBusinessClass {
   }
 
   /**
-   * 清空所有持久化状态 + 重置本地 UI 状态
+   * 清空终端和编辑器记录 + 重置本地 UI 状态（保留项目列表）
    * - 关闭所有 PTY sessions
-   * - 调后端清空 SQLite projects/terminals/editors
-   * - 重置本地 projects/editors/sessions/tabs 为空
+   * - 调后端清空 SQLite terminals/editors（不动 projects）
+   * - 重置本地 editors/sessions/tabs 为空，projects 保持不变
    */
   async clearAllState(): Promise<void> {
     console.log('[AppBusiness] clearAllState: starting')
@@ -316,19 +316,15 @@ class AppBusinessClass {
         console.warn('[AppBusiness] clearAllState: closeSession failed', session.id, e)
       }
     }
-    // 2. 调后端清空 SQLite
+    // 2. 调后端清空 SQLite terminals/editors（projects 不动）
     await apiClearAllState()
-    // 3. 重置本地状态
-    this.projects = []
+    // 3. 重置本地状态（保留 projects）
     this.editors = []
     this.tabs = []
     this.sessions = []
     this.persistedTerminals = []
-    this.activeProjectId = 'default'
-    this.notifyProjectsChange()
     this.notifyEditorsChange()
     this.notifyTabsChange()
-    this.notifyActiveProjectChange('default')
     console.log('[AppBusiness] clearAllState: done')
   }
 
