@@ -246,6 +246,47 @@
     .step-body h3 { font-size: 1.2rem; margin-bottom: 4px; }
     .step-body p { color: var(--text-muted); font-size: 0.95rem; }
     .step-connector { width: 2px; height: 32px; background: var(--border); margin: 0 0 16px 23px; }
+    .step-body code {
+      display: block; font-family: var(--font-mono); font-size: 0.85rem;
+      background: var(--code-bg); padding: 8px 12px; border-radius: 6px;
+      margin-top: 8px; color: var(--secondary);
+    }
+
+    /* Tailscale Section */
+    .tailscale-section {
+      background: linear-gradient(180deg, transparent 0%, rgba(107, 163, 255, 0.03) 100%);
+    }
+    .tailscale-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px;
+    }
+    .tailscale-card {
+      background: var(--bg-surface); border: 1px solid var(--border); border-radius: 16px;
+      padding: 28px; transition: all 0.3s ease;
+    }
+    .tailscale-card:hover { border-color: var(--secondary); transform: translateY(-4px); }
+    .tailscale-icon { font-size: 2rem; margin-bottom: 16px; }
+    .tailscale-card h3 { font-size: 1.2rem; margin-bottom: 12px; }
+    .tailscale-card p { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 16px; }
+    .tailscale-card pre {
+      background: var(--code-bg); padding: 12px; border-radius: 8px;
+      font-family: var(--font-mono); font-size: 0.8rem; color: var(--secondary);
+      overflow-x: auto;
+    }
+    .warning-box {
+      background: rgba(255, 184, 0, 0.08); border: 1px solid rgba(255, 184, 0, 0.3);
+      border-radius: 12px; padding: 16px 20px; margin-top: 24px;
+    }
+    .warning-box h4 { color: #ffb800; font-size: 1rem; margin-bottom: 8px; }
+    .warning-box p { color: var(--text-muted); font-size: 0.9rem; }
+
+    /* Mac tips */
+    .mac-tips { max-width: 700px; margin: 0 auto; }
+    .mac-tip-item {
+      display: flex; gap: 16px; align-items: flex-start; margin-bottom: 20px;
+    }
+    .mac-tip-icon { font-size: 1.5rem; flex-shrink: 0; }
+    .mac-tip-body h4 { font-size: 1rem; margin-bottom: 4px; }
+    .mac-tip-body p { color: var(--text-muted); font-size: 0.9rem; }
 
     /* CTA / Download */
     .cta-section { background: linear-gradient(180deg, transparent 0%, rgba(255, 107, 107, 0.03) 100%); }
@@ -342,6 +383,8 @@
       <nav class="header-nav">
         <a href="#features">功能</a>
         <a href="#architecture">架构</a>
+        <a href="#tailscale">Tailscale</a>
+        <a href="#mac-build">打包</a>
         <a href="#download">下载</a>
         <a href="https://github.com/zzyong24/AITerm" target="_blank" rel="noopener" class="header-github">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.4 3-.405 1.02.005 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
@@ -602,6 +645,115 @@
           <div class="step-body">
             <h3>启动开发</h3>
             <p>npm run dev</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tailscale 内网隧道 -->
+  <section class="section tailscale-section" id="tailscale">
+    <div class="container">
+      <h2 class="section-title">远程开发：Tailscale 内网隧道</h2>
+      <p class="section-subtitle">通过 Tailscale 安全地远程访问 AITerm</p>
+
+      <div class="tailscale-grid">
+        <div class="tailscale-card">
+          <div class="tailscale-icon">🌐</div>
+          <h3>什么是 Tailscale</h3>
+          <p>Tailscale 是一款基于 WireGuard 的零配置 VPN，可在不同设备间建立安全内网隧道。借助 AITerm Server-as-SSOT 架构，实现跨网络访问。</p>
+        </div>
+        <div class="tailscale-card">
+          <div class="tailscale-icon">⚡</div>
+          <h3>为什么用 Tailscale</h3>
+          <p>AITerm 的 SQLite + WebSocket 状态同步依赖局域网。Tailscale 能将任意设备的网络变成「虚拟局域网」，无论你身在何处都能访问。</p>
+        </div>
+        <div class="tailscale-card">
+          <div class="tailscale-icon">🔐</div>
+          <h3>安全可靠</h3>
+          <p>端到端加密，流量不经过 Tailscale 服务器（仅作 NAT 穿透协调）。开源客户端，支持 macOS / Windows / Linux。</p>
+        </div>
+      </div>
+
+      <div class="warning-box">
+        <h4>⚠️ 前置要求</h4>
+        <p>所有设备需安装并登录 Tailscale（tailscale.com/download），使用同一 Tailscale 账号或共享网络即可。</p>
+      </div>
+
+      <div style="margin-top: 48px; max-width: 700px; margin-left: auto; margin-right: auto;">
+        <h3 style="font-size: 1.3rem; margin-bottom: 24px;">连接步骤</h3>
+        <div class="steps-list">
+          <div class="step-item">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <h3>安装 Tailscale</h3>
+              <p>macOS: brew install --cask tailscale</p>
+            </div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step-item">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <h3>登录并连接</h3>
+              <p>tailscale up</p>
+            </div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step-item">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <h3>获取设备 IP</h3>
+              <p>tailscale status | grep your-hostname</p>
+              <code>100.x.x.x  ← Tailscale 虚拟 IP</code>
+            </div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step-item">
+            <div class="step-num">4</div>
+            <div class="step-body">
+              <h3>配置远程连接</h3>
+              <p>在 AITerm 中将 localhost 替换为 100.x.x.x 即可</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- macOS 打包说明 -->
+  <section class="section" id="mac-build">
+    <div class="container">
+      <h2 class="section-title">macOS 打包指南</h2>
+      <p class="section-subtitle">构建可分发的 .app 应用</p>
+
+      <div class="mac-tips">
+        <div class="mac-tip-item">
+          <div class="mac-tip-icon">📦</div>
+          <div class="mac-tip-body">
+            <h4>构建 macOS 应用</h4>
+            <p>运行以下命令构建 macOS 版本（输出到 release 目录）：</p>
+            <pre>npm run build:mac</pre>
+          </div>
+        </div>
+        <div class="mac-tip-item">
+          <div class="mac-tip-icon">💻</div>
+          <div class="mac-tip-body">
+            <h4>Apple Silicon 特别说明</h4>
+            <p>如果打包机是 Apple Silicon (M1/M2/M3)，输出的是 arm64 架构版本。Intel Mac 需要在 Intel 机器上打包才能生成 x64 版本。</p>
+          </div>
+        </div>
+        <div class="mac-tip-item">
+          <div class="mac-tip-icon">🚫</div>
+          <div class="mac-tip-body">
+            <h4>Gatekeeper 提示</h4>
+            <p>首次运行 .app 时 macOS 可能提示「无法打开，因为来自身份不明的开发者」。前往系统设置 → 隐私与安全性 → 仍要打开即可。</p>
+          </div>
+        </div>
+        <div class="mac-tip-item">
+          <div class="mac-tip-icon">🗜️</div>
+          <div class="mac-tip-body">
+            <h4>分发格式</h4>
+            <p>release/AITerm-mac/ 目录下直接是 .app 文件，可直接分发给用户，压缩为 .zip 即可上传 GitHub Release。</p>
           </div>
         </div>
       </div>
