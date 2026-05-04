@@ -505,7 +505,11 @@ function registerIpcHandlers() {
   })
 
   ipcMain.handle('window-close', () => {
-    mainWindow?.close()
+    // 调用 app.quit() 而非 mainWindow?.close()：
+    // macOS 下 window-all-closed 不会触发 app.quit()（darwin guard），
+    // 导致 before-quit 清理钩子永远不执行，进程僵尸驻留。
+    // app.quit() → before-quit → ptyService.closeAll() → app.exit(0) 完整链路。
+    app.quit()
   })
 
   ipcMain.handle('window-is-maximized', () => {
