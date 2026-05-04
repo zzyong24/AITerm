@@ -7,8 +7,8 @@ import {
   terminalOutputListener,
   terminalClosedListener,
   terminalActivityListener,
-  terminalRenamedListener,
   stateChangedListener,
+  sessionsSnapshotListener,
   getProjects as apiGetProjects,
   getHomeDir as apiGetHomeDir,
   getEditorPath as apiGetEditorPath,
@@ -141,8 +141,13 @@ class AppBusinessClass {
   private isSyncing = false
   /** stateChangedListener 的取消订阅函数，保证只注册一次 */
   private stateChangedUnsubscribe: (() => void) | null = null
-  /** syncRemoteSessions 防抖 timer */
-  private syncRemoteDebounceTimer: ReturnType<typeof setTimeout> | null = null
+  /** sessionsSnapshotListener 的取消订阅函数，保证只注册一次 */
+  private sessionsSnapshotUnsubscribe: (() => void) | null = null
+  /**
+   * 用户选择的 activeItemId，按 projectId 存储。
+   * 与 sessions[] 解耦 — snapshot replace 后靠这里恢复焦点。
+   */
+  private uiPrefs = new Map<string, string>()
 
   // 活跃度数据
   activityData: Record<string, { last: number; bytes: number }> = {}
@@ -490,9 +495,6 @@ class AppBusinessClass {
               this.projects = projects
               this.notifyProjectsChange()
             }).catch(e => console.error('[CrossSync] Failed to refresh projects:', e))
-          } else if (entity === 'terminals') {
-            // 跨端同步：防抖后采用远端已存在的 PTY sessions，不创建新进程
-            this.debouncedSyncRemoteSessions()
           } else if (entity === 'editors') {
             // 刷新所有已知项目的 editors
             // 不能只看 this.editors（远端关光某项目后本地 editors 已空，会漏掉同步）
@@ -549,21 +551,13 @@ class AppBusinessClass {
         })
       }
 
-      // BUG-04: 订阅远端 terminal-renamed 事件，立即更新 Tab 标签，无需等全量 state reload
-      terminalRenamedListener(({ sessionId, name }) => {
-        const session = this.sessions.find(s => s.id === sessionId)
-        if (!session) return
-        const validName = name.replace(/[^\w\u4e00-\u9fa5\-_]/g, '')
-        session.name = validName
-        this.tabs = this.tabs.map(tab => ({
-          ...tab,
-          items: tab.items.map(item =>
-            item.id === sessionId ? { ...item, name: validName } : item
-          )
-        }))
-        this.notifySessionsChange()
-        this.notifyTabsChange()
-      })
+      // Step 7: 订阅 sessions_snapshot 事件（Server-as-SSOT）
+      // 服务端在每次 PTY lifecycle 事件后广播完整 session 列表，客户端原子替换
+      if (!this.sessionsSnapshotUnsubscribe) {
+        this.sessionsSnapshotUnsubscribe = sessionsSnapshotListener(({ sessions }) => {
+          this.onSessionsSnapshot(sessions)
+        })
+      }
 
       this.notifyInitialized()
       this.notifyProjectsChange()
@@ -763,16 +757,11 @@ class AppBusinessClass {
 
   async closeSession(sessionId: string) {
     console.log('[AppBusiness] closeSession: starting', { sessionId })
-    // 先保存项目 ID，关闭后需要更新持久化
     const session = this.sessions.find(s => s.id === sessionId)
     const projectId = session?.projectId
-    // 调用 API 关闭后端终端
-    try {
-      await apiCloseTerminalSession(sessionId)
-      console.log('[AppBusiness] closeSession: apiCloseTerminalSession succeeded', { sessionId })
-    } catch (e) {
-      console.error('[AppBusiness] closeSession: apiCloseTerminalSession failed', { sessionId, error: e })
-      /* ignore */ }
+
+    // === Optimistic UI: 立即更新本地状态，给用户即时视觉反馈 ===
+    // 不等待 API 响应，先从 tabs 和 sessions 中移除，避免关闭后 UI 残留
 
     // 从 tabs 中移除对应的 item
     this.tabs = this.tabs.map(tab => {
@@ -784,11 +773,7 @@ class AppBusinessClass {
       } else if (newActiveId && !newItems.find(i => i.id === newActiveId)) {
         newActiveId = newItems.length > 0 ? newItems[0].id : null
       }
-      return {
-        ...tab,
-        items: newItems,
-        activeItemId: newActiveId
-      }
+      return { ...tab, items: newItems, activeItemId: newActiveId }
     })
 
     // 从 sessions 中移除
@@ -797,14 +782,25 @@ class AppBusinessClass {
       this.sessions.splice(index, 1)
     }
 
-    // 清理活跃度数据，防止内存泄漏
+    // 清理客户端运行时数据，防止内存泄漏
     delete this.activityData[sessionId]
     delete this.waitingForInput[sessionId]
     delete this.failedSessions[sessionId]
 
-    // 通知更新
+    // 立即通知 UI 更新（不等待 API 响应）
     this.notifySessionsChange()
     this.notifyTabsChange()
+
+    // === 异步：调用 API 关闭后端 PTY（不阻塞 UI） ===
+    // 服务端关闭后会广播 sessions_snapshot，onSessionsSnapshot 会确认移除已完成
+    try {
+      await apiCloseTerminalSession(sessionId)
+      console.log('[AppBusiness] closeSession: apiCloseTerminalSession succeeded', { sessionId })
+    } catch (e) {
+      console.error('[AppBusiness] closeSession: apiCloseTerminalSession failed', { sessionId, error: e })
+      // API 失败时不回滚乐观更新 — 服务端快照会给出权威状态
+    }
+
     // 使用精确操作删除持久化终端，避免 DELETE ALL 竞态
     if (projectId) {
       removePersistedTerminal(sessionId)
@@ -905,68 +901,113 @@ class AppBusinessClass {
   }
 
   /**
-   * 从服务端拉取当前所有 PTY sessions，双向对齐本地状态：
-   * 1. 本地没有、服务端有 → adoptSession（采用）
-   * 2. 本地有、服务端没有 → 从本地 UI 状态移除（PTY 已死，不需要再 kill API）
-   * 由 stateChangedListener entity=terminals 触发，实现跨端 terminal 同步。
+   * Server-as-SSOT: 收到服务端广播的权威 session 列表后，原子替换本地 sessions[]。
+   * 同时合并/移除 tabs 中对应的 terminal 条目，并用 uiPrefs 恢复用户焦点。
+   * 不做 diff/reconcile — 直接替换。
    */
-  async syncRemoteSessions() {
-    const remoteSessions = await apiListSessions()
-    const remoteIds = new Set(remoteSessions.map(s => s.id))
+  onSessionsSnapshot(remoteSessions: Array<{ id: string; projectId: string | null; projectName: string | null; workingDir: string; name?: string | null }>) {
+    console.log('[AppBusiness] onSessionsSnapshot: received', remoteSessions.length, 'sessions')
 
-    // Step 1：采用本地缺失的远端 session
-    let hasNew = false
-    for (const remote of remoteSessions) {
-      if (!this.sessions.find(s => s.id === remote.id)) {
-        // 补充项目名（服务端可能只有 projectId）
-        const project = this.projects.find(p => p.id === remote.projectId)
-        const projectName = remote.projectName || project?.name || null
-        this.adoptSession(remote.id, remote.projectId, projectName, remote.workingDir)
-        hasNew = true
+    // 保存旧 session 映射供数据合并用（alive 标志、activityData）
+    const oldSessionMap = new Map(this.sessions.map(s => [s.id, s]))
+
+    // 原子替换 sessions[]
+    this.sessions = remoteSessions.map(remote => {
+      const old = oldSessionMap.get(remote.id)
+      const project = this.projects.find(p => p.id === remote.projectId)
+      return {
+        id: remote.id,
+        projectId: remote.projectId,
+        projectName: remote.projectName || project?.name || null,
+        workingDir: remote.workingDir || '~',
+        name: remote.name || old?.name || remote.projectName || project?.name || '终端',
+        alive: true,
+        lastActivity: old?.lastActivity ?? 0,
+        children: old?.children ?? [],
+        activeSubId: old?.activeSubId ?? null
+      }
+    })
+
+    // 清理已不存在的 session 的运行时数据
+    const newIds = new Set(this.sessions.map(s => s.id))
+    for (const oldId of oldSessionMap.keys()) {
+      if (!newIds.has(oldId)) {
+        delete this.activityData[oldId]
+        delete this.waitingForInput[oldId]
+        delete this.failedSessions[oldId]
       }
     }
 
-    // Step 2：移除本地有、远端没有的 stale session（PTY 已不存在，只清 UI 状态）
-    const staleIds = this.sessions.filter(s => !remoteIds.has(s.id)).map(s => s.id)
-    if (staleIds.length > 0) {
-      console.log('[AppBusiness] syncRemoteSessions: removing stale local sessions', staleIds)
-      for (const staleId of staleIds) {
-        // 不调 API（PTY 已死），直接清理本地 UI 状态
-        this.tabs = this.tabs.map(tab => {
-          const newItems = tab.items.filter(i => i.id !== staleId)
-          return {
-            ...tab,
-            items: newItems,
-            activeItemId: newItems.length > 0 ? newItems[0].id : null
-          }
-        })
-        const idx = this.sessions.findIndex(s => s.id === staleId)
-        if (idx !== -1) this.sessions.splice(idx, 1)
-        delete this.activityData[staleId]
-        delete this.waitingForInput[staleId]
-        delete this.failedSessions[staleId]
-      }
-      this.notifySessionsChange()
-      this.notifyTabsChange()
-    }
+    // 重建 tabs 中的 terminal 条目
+    this.rebuildTabsFromSessions()
 
-    if (hasNew) {
-      console.log('[AppBusiness] syncRemoteSessions: adopted new sessions, count=', remoteSessions.length)
-    }
+    this.notifySessionsChange()
+    this.notifyTabsChange()
   }
 
   /**
-   * 防抖版 syncRemoteSessions：300ms 内的多次 state_changed(terminals) 合并为一次调用。
-   * 防止 restoreAllTerminals 期间 N 个写操作产生 N 个并发 HTTP 请求。
+   * 将 sessions[] 投影到 tabs 中的 terminal 条目。
+   * - 补充 sessions 中有但 tabs 中没有的 terminal
+   * - 移除 tabs 中有但 sessions 中已不存在的 terminal
+   * - 合并已有 editor / browser 条目（不动它们）
+   * - 用 uiPrefs 恢复每个 project 的 activeItemId
    */
-  private debouncedSyncRemoteSessions() {
-    if (this.syncRemoteDebounceTimer) {
-      clearTimeout(this.syncRemoteDebounceTimer)
+  private rebuildTabsFromSessions() {
+    const sessionsByProject = new Map<string, TerminalSession[]>()
+    for (const s of this.sessions) {
+      if (!s.projectId) continue
+      if (!sessionsByProject.has(s.projectId)) {
+        sessionsByProject.set(s.projectId, [])
+      }
+      sessionsByProject.get(s.projectId)!.push(s)
     }
-    this.syncRemoteDebounceTimer = setTimeout(() => {
-      this.syncRemoteDebounceTimer = null
-      this.syncRemoteSessions().catch(e => console.error('[CrossSync] syncRemoteSessions failed:', e))
-    }, 300)
+
+    // 更新现有 tabs
+    const updatedTabs = this.tabs.map(tab => {
+      const projectSessions = sessionsByProject.get(tab.projectId) || []
+      const projectSessionIds = new Set(projectSessions.map(s => s.id))
+
+      // 过滤掉已死的 terminal 条目，保留 editor/browser
+      const nonTerminalItems = tab.items.filter(i => i.type !== 'terminal')
+      // 重建 terminal 条目（按服务端顺序）
+      const terminalItems: TabItem[] = projectSessions.map(s => {
+        const existing = tab.items.find(i => i.id === s.id && i.type === 'terminal')
+        return existing ? { ...existing, name: s.name } : { id: s.id, type: 'terminal' as const, name: s.name }
+      })
+
+      const newItems = [...terminalItems, ...nonTerminalItems]
+
+      // 恢复 activeItemId：优先 uiPrefs，其次原来的值（如果仍存在），最后取第一个
+      const prefId = this.uiPrefs.get(tab.projectId)
+      let newActiveId: string | null = null
+      if (prefId && newItems.find(i => i.id === prefId)) {
+        newActiveId = prefId
+      } else if (tab.activeItemId && newItems.find(i => i.id === tab.activeItemId)) {
+        newActiveId = tab.activeItemId
+      } else if (newItems.length > 0) {
+        newActiveId = newItems[0].id
+      }
+
+      return { ...tab, items: newItems, activeItemId: newActiveId }
+    })
+
+    // 为 sessions 中出现但没有 tab 的 projectId 新建 tab
+    const existingProjectIds = new Set(updatedTabs.map(t => t.projectId))
+    for (const [projectId, projectSessions] of sessionsByProject) {
+      if (existingProjectIds.has(projectId)) continue
+      const firstSession = projectSessions[0]
+      const project = this.projects.find(p => p.id === projectId)
+      const projectName = firstSession.projectName || project?.name || '默认'
+      updatedTabs.push({
+        projectId,
+        projectName,
+        items: projectSessions.map(s => ({ id: s.id, type: 'terminal' as const, name: s.name })),
+        activeItemId: projectSessions[0]?.id || null
+      })
+    }
+
+    // 移除已无任何 item 且无 session 的空 tab（保留有 editor/browser 的）
+    this.tabs = updatedTabs.filter(tab => tab.items.length > 0)
   }
 
   // ============ 终端列表保存/恢复 ============
@@ -1408,6 +1449,9 @@ class AppBusinessClass {
         targetProjectId = editor.projectId
       }
     }
+
+    // 记录用户偏好 — snapshot replace 后 rebuildTabsFromSessions 用来恢复焦点
+    this.uiPrefs.set(targetProjectId, itemId)
 
     // Switch project if needed (update both activeProjectId and tabs atomically)
     if (targetProjectId !== this.activeProjectId) {

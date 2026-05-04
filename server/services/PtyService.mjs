@@ -9,7 +9,22 @@ export class PtyService extends EventEmitter {
   constructor() {
     super()
     this.sessions = new Map()
+    this._snapshotDebounceTimer = null
     console.log('PtyService initialized')
+  }
+
+  /**
+   * Debounced snapshot broadcast — coalesces rapid bursts (e.g. restoreAllTerminals)
+   * into a single event. 300ms window is enough to batch typical restore loops.
+   */
+  _emitSnapshotDebounced() {
+    if (this._snapshotDebounceTimer) {
+      clearTimeout(this._snapshotDebounceTimer)
+    }
+    this._snapshotDebounceTimer = setTimeout(() => {
+      this._snapshotDebounceTimer = null
+      this.emit('sessions-snapshot', this.listSessions())
+    }, 300)
   }
 
   async createSession(projectId, projectName, workingDir) {
@@ -47,10 +62,14 @@ export class PtyService extends EventEmitter {
         id: sessionId,
         projectId,
         projectName,
-        workingDir: cwd
+        workingDir: cwd,
+        name: null  // can be overwritten by rename
       },
       lastActivity: new Date()
     })
+
+    // Broadcast snapshot so all clients see the new session
+    this._emitSnapshotDebounced()
 
     ptyProcess.onData((data) => {
       const bytes = Buffer.from(data).length
@@ -72,6 +91,8 @@ export class PtyService extends EventEmitter {
       console.log(`PTY session ${sessionId} exited with code ${exitData.exitCode}`)
       this.emit('closed', { session_id: sessionId })
       this.sessions.delete(sessionId)
+      // Broadcast authoritative session list after PTY exits
+      this._emitSnapshotDebounced()
     })
 
     console.log(`PTY session ${sessionId} created successfully`)
@@ -203,6 +224,8 @@ export class PtyService extends EventEmitter {
       } finally {
         this.sessions.delete(sessionId)
         console.log('[PtyService] session deleted from map', { sessionId, remainingSessions: this.sessions.size })
+        // Broadcast authoritative session list after explicit close
+        this._emitSnapshotDebounced()
       }
     } else {
       console.warn('[PtyService] session not found in map', { sessionId })
@@ -256,6 +279,19 @@ export class PtyService extends EventEmitter {
 
   listSessions() {
     return Array.from(this.sessions.values()).map((s) => s.info)
+  }
+
+  /**
+   * Rename an in-memory session and broadcast a snapshot.
+   * The DB write is still done in routes.mjs before calling this.
+   */
+  renameSession(sessionId, name) {
+    const session = this.sessions.get(sessionId)
+    if (session) {
+      session.info = { ...session.info, name }
+    }
+    // Emit snapshot immediately (no debounce — rename is a single discrete event)
+    this.emit('sessions-snapshot', this.listSessions())
   }
 
   getHomeDir() {

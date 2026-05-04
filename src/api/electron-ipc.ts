@@ -303,6 +303,11 @@ export const terminalRenamedListener = (_callback: (data: { sessionId: string; n
   return () => {}
 }
 
+// sessions_snapshot WS 事件 stub（IPC 模式下不通过 WS 广播）
+export const sessionsSnapshotListener = (_callback: (data: { sessions: any[] }) => void) => {
+  return () => {}
+}
+
 // clearTerminals IPC stub（通过 IPC channel 调用）
 export const clearTerminals = (projectPath: string) =>
   window.electronAPI.invoke('clear-terminals', projectPath)

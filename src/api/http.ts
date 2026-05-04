@@ -500,6 +500,16 @@ export const terminalRenamedListener = (callback: (data: { sessionId: string; na
 }
 
 /**
+ * sessions_snapshot：Server-as-SSOT 核心事件。
+ * PTY lifecycle（createSession / close / onExit / rename）后服务端广播权威 session 列表。
+ * 客户端原子替换本地 sessions，不做 diff/reconcile。
+ */
+export const sessionsSnapshotListener = (callback: (data: { sessions: SessionInfo[] }) => void) => {
+  terminalWs.on('sessions_snapshot', callback)
+  return () => terminalWs.off('sessions_snapshot', callback)
+}
+
+/**
  * 跨端状态同步：当其他客户端修改了 projects/terminals/editors 时触发
  * entity: 'projects' | 'terminals' | 'editors'
  */

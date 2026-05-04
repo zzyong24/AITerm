@@ -32,10 +32,10 @@ export function registerRoutes(app, services, options = {}) {
       const { id } = req.params
       const { name } = req.body
       const validName = String(name).replace(/[^\w\u4e00-\u9fa5\-_]/g, '')
-      // 持久化到 SQLite（dbService.on('changed') 会自动广播 state_changed）
+      // Persist to SQLite
       dbService.updateTerminal(id, { name: validName })
-      // 发送 UI 专用事件（用于立即更新 Tab 标签，无需等待全量 state reload）
-      ptyService.emit('terminal-renamed', { sessionId: id, name: validName })
+      // Update in-memory info + broadcast sessions_snapshot to all clients
+      ptyService.renameSession(id, validName)
       res.json({ success: true, name: validName })
     } catch (e) {
       res.status(500).json({ error: e.message })
@@ -646,10 +646,19 @@ export function registerRoutes(app, services, options = {}) {
     })
 
     dbService.on('changed', (data) => {
-      broadcastToWs(JSON.stringify({ type: 'state_changed', ...data }))
+      // Only broadcast state_changed for non-terminal entities (terminals use sessions_snapshot now)
+      if (data.entity !== 'terminals') {
+        broadcastToWs(JSON.stringify({ type: 'state_changed', ...data }))
+      }
     })
 
-    // UI 专用事件：terminal 重命名（即时更新 Tab 标签，不走全量 state reload）
+    // Server-as-SSOT: broadcast authoritative session list on every PTY lifecycle event
+    ptyService.on('sessions-snapshot', (sessions) => {
+      broadcastToWs(JSON.stringify({ type: 'sessions_snapshot', sessions }))
+    })
+
+    // Keep terminal-renamed for backward compat with older clients (web app on 5003)
+    // New clients use sessions_snapshot instead — this can be removed once all clients updated
     ptyService.on('terminal-renamed', (data) => {
       broadcastToWs(JSON.stringify({ type: 'terminal-renamed', ...data }))
     })

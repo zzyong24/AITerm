@@ -4,6 +4,12 @@ import { resolve } from 'path'
 
 export default defineConfig({
   plugins: [vue()],
+  test: {
+    // Only pick up unit tests in tests/ — exclude e2e Playwright specs
+    include: ['tests/**/*.test.ts', 'tests/**/*.spec.ts'],
+    exclude: ['e2e/**', 'node_modules/**'],
+    environment: 'node',
+  },
   base: './',
   resolve: {
     alias: {
