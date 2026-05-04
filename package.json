@@ -1,8 +1,23 @@
 {
   "name": "aiterm",
   "version": "0.1.0",
-  "description": "多终端管理器 - 基于 Electron + Vue",
+  "description": "多终端管理器 - 基于 Electron + Vue 的现代化开发环境",
+  "author": "zzyong24 <zzyong24@github.com>",
+  "license": "MIT",
   "main": "dist-electron/electron/main.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zzyong24/AITerm"
+  },
+  "homepage": "https://zzyong24.github.io/AITerm",
+  "keywords": [
+    "terminal",
+    "electron",
+    "vue",
+    "multi-terminal",
+    "developer-tools",
+    "aiterm"
+  ],
   "scripts": {
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:frontend": "vite",

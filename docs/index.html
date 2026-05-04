@@ -1,0 +1,1278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AITerm - 多终端管理器</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%230d0d18'/><text x='4' y='23' font-size='18' font-weight='bold' font-family='system-ui' fill='%23ff6b6b'>AT</text></svg>">
+  <meta name="description" content="多终端管理器 - 基于 Electron + Vue 的现代化开发环境，跨端状态同步，真实 PTY 终端体验">
+  <meta property="og:title" content="AITerm - 多终端管理器">
+  <meta property="og:description" content="多终端管理器，基于 Electron + Vue，让每一次编码都流畅自然">
+  <meta property="og:type" content="website">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --font-heading: 'Kalam', 'Inter', system-ui, sans-serif;
+      --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', 'Consolas', monospace;
+
+      --bg: #0d0d18;
+      --bg-surface: #191930;
+      --bg-surface-hover: #222245;
+      --border: #3a3a5c;
+      --text: #f0ede8;
+      --text-muted: #b0aec0;
+      --accent: #ff6b6b;
+      --accent-hover: #ff8585;
+      --secondary: #6ba3ff;
+      --complete: #5ab88f;
+      --planned: #807060;
+      --shadow-color: #ff6b6b;
+      --shadow-hard: 4px 4px 0 var(--shadow-color);
+      --shadow-hard-lg: 6px 6px 0 var(--shadow-color);
+      --dot-color: rgba(255, 255, 255, 0.04);
+      --header-bg: rgba(13, 13, 24, 0.94);
+      --code-bg: #111122;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 80px;
+    }
+
+    body {
+      font-family: var(--font-body);
+      font-size: 18px;
+      line-height: 1.6;
+      color: var(--text);
+      background-color: var(--bg);
+      background-image: radial-gradient(var(--dot-color) 1px, transparent 1px);
+      background-size: 24px 24px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a {
+      color: var(--secondary);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    a:hover {
+      color: var(--accent);
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    .wobbly {
+      border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+    }
+
+    h1, h2, h3, h4 {
+      font-family: var(--font-heading);
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    /* Site Header */
+    .site-header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      background: var(--header-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 2px dashed var(--border);
+    }
+
+    .header-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo {
+      font-family: var(--font-heading);
+      font-weight: 700;
+      font-size: 1.4rem;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .logo:hover {
+      color: var(--accent);
+    }
+
+    .logo-icon {
+      color: var(--accent);
+      font-size: 1.1rem;
+    }
+
+    .header-nav {
+      display: flex;
+      gap: 24px;
+      align-items: center;
+    }
+
+    .header-nav a {
+      font-family: var(--font-body);
+      font-size: 1rem;
+      color: var(--text-muted);
+      transition: color 0.2s;
+    }
+
+    .header-nav a:hover {
+      color: var(--accent);
+    }
+
+    .header-github {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg-surface);
+      font-family: var(--font-body);
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--text);
+      text-decoration: none;
+      transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+    }
+
+    .header-github:hover {
+      border-color: var(--accent);
+      color: var(--text);
+      transform: translateY(-1px);
+    }
+
+    /* Hero */
+    .hero {
+      position: relative;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: linear-gradient(135deg, #0d0d18 0%, #141430 40%, #0d0d18 100%);
+    }
+
+    .hero-scene {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      overflow: hidden;
+      opacity: 0.6;
+    }
+
+    .hero-scene::before {
+      content: '';
+      position: absolute;
+      top: 20%;
+      right: 10%;
+      width: 400px;
+      height: 400px;
+      background: radial-gradient(circle, rgba(255, 107, 107, 0.15) 0%, transparent 70%);
+      filter: blur(60px);
+    }
+
+    .hero-scene::after {
+      content: '';
+      position: absolute;
+      bottom: 20%;
+      left: 10%;
+      width: 300px;
+      height: 300px;
+      background: radial-gradient(circle, rgba(107, 163, 255, 0.1) 0%, transparent 70%);
+      filter: blur(50px);
+    }
+
+    .hero-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      background:
+        radial-gradient(ellipse at center, transparent 0%, rgba(13,13,24,0.4) 70%),
+        linear-gradient(to top, rgba(13,13,24,1) 0%, rgba(13,13,24,0.8) 8%, transparent 25%),
+        linear-gradient(to left, rgba(13,13,24,1) 0%, rgba(13,13,24,0.8) 12%, transparent 30%);
+      pointer-events: none;
+    }
+
+    .hero-content {
+      position: relative;
+      z-index: 3;
+      text-align: center;
+      padding: 120px 24px 80px;
+      max-width: 800px;
+    }
+
+    .hero-badge {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--accent);
+      border: 1px solid rgba(255, 107, 107, 0.3);
+      background: rgba(255, 107, 107, 0.08);
+      padding: 4px 16px;
+      border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+      margin-bottom: 24px;
+      letter-spacing: 0.03em;
+    }
+
+    .hero-title {
+      margin-bottom: 16px;
+    }
+
+    .hero-line1 {
+      display: block;
+      font-size: clamp(2.8rem, 7vw, 5rem);
+      color: #e8e5df;
+    }
+
+    .hero-line2 {
+      display: block;
+      font-size: clamp(2.4rem, 6vw, 4.2rem);
+      color: #ff6b6b;
+    }
+
+    .hero-subtitle {
+      font-size: clamp(1rem, 2.5vw, 1.3rem);
+      color: #9a9aaa;
+      max-width: 560px;
+      margin: 0 auto 32px;
+    }
+
+    .hero-stats {
+      display: flex;
+      justify-content: center;
+      gap: 48px;
+      margin-bottom: 40px;
+      flex-wrap: wrap;
+    }
+
+    .stat-item {
+      text-align: center;
+    }
+
+    .stat-number {
+      display: block;
+      font-family: var(--font-mono);
+      font-size: 2.4rem;
+      font-weight: 700;
+      color: #ff6b6b;
+      line-height: 1;
+    }
+
+    .stat-label {
+      font-family: var(--font-body);
+      font-size: 0.9rem;
+      color: #9a9aaa;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-family: var(--font-body);
+      font-size: 1rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: none;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: var(--shadow-hard);
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-hover);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-hard-lg);
+      color: #fff;
+    }
+
+    .btn-secondary {
+      background: var(--bg-surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--accent);
+      transform: translateY(-1px);
+      color: var(--accent);
+    }
+
+    .hero-stars {
+      text-align: center;
+    }
+
+    .star-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      color: #ffb800;
+      background: rgba(255, 184, 0, 0.1);
+      border: 1px solid rgba(255, 184, 0, 0.3);
+      padding: 6px 16px;
+      border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+      text-decoration: none;
+      transition: background 0.2s;
+    }
+
+    .star-badge:hover {
+      background: rgba(255, 184, 0, 0.15);
+      color: #ffb800;
+    }
+
+    /* Pathway Strip */
+    .pathway-strip {
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 20px 0;
+      overflow-x: auto;
+    }
+
+    .pathway-track {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      min-width: max-content;
+      padding: 0 24px;
+    }
+
+    .pathway-tag {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      background: var(--bg-surface-hover);
+      padding: 6px 14px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    .pathway-tag.highlight {
+      color: var(--accent);
+      border-color: rgba(255, 107, 107, 0.4);
+      background: rgba(255, 107, 107, 0.08);
+    }
+
+    .pathway-arrow {
+      color: var(--text-muted);
+      font-size: 1.2rem;
+    }
+
+    /* Section */
+    .section {
+      padding: 100px 0;
+    }
+
+    .section-title {
+      font-size: clamp(2rem, 4vw, 2.8rem);
+      text-align: center;
+      margin-bottom: 16px;
+    }
+
+    .section-subtitle {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 1.1rem;
+      margin-bottom: 60px;
+    }
+
+    /* Why Section */
+    .why-section {
+      background: linear-gradient(180deg, transparent 0%, rgba(255, 107, 107, 0.02) 100%);
+    }
+
+    .why-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 24px;
+    }
+
+    .why-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      padding: 32px 28px;
+      text-align: center;
+      transition: all 0.3s ease;
+    }
+
+    .why-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-hard);
+    }
+
+    .card-rotate-1 { border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px; }
+    .card-rotate-2 { border-radius: 15px 255px 15px 225px / 225px 15px 255px 15px; }
+    .card-rotate-3 { border-radius: 225px 15px 255px 15px / 15px 255px 15px 225px; }
+    .card-rotate-4 { border-radius: 15px 225px 15px 255px / 255px 15px 225px 15px; }
+
+    .why-icon {
+      font-size: 2.5rem;
+      margin-bottom: 16px;
+    }
+
+    .why-card h3 {
+      font-size: 1.3rem;
+      margin-bottom: 12px;
+    }
+
+    .why-card p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+
+    /* Features Grid */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 24px;
+    }
+
+    .feature-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px;
+      transition: all 0.3s ease;
+    }
+
+    .feature-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-4px);
+    }
+
+    .feature-icon {
+      font-size: 2rem;
+      margin-bottom: 16px;
+    }
+
+    .feature-card h3 {
+      font-size: 1.3rem;
+      margin-bottom: 8px;
+    }
+
+    .feature-card p {
+      color: var(--text-muted);
+      margin-bottom: 16px;
+    }
+
+    .feature-list {
+      list-style: none;
+    }
+
+    .feature-list li {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      padding: 4px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .feature-list li::before {
+      content: '→';
+      color: var(--accent);
+    }
+
+    /* Architecture Diagram */
+    .arch-section {
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .arch-diagram {
+      max-width: 800px;
+      margin: 0 auto;
+      text-align: center;
+    }
+
+    .arch-diagram h3 {
+      font-size: 1.5rem;
+      margin-bottom: 32px;
+      color: var(--text-muted);
+    }
+
+    .arch-flow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .arch-box {
+      background: var(--bg);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 28px;
+      font-family: var(--font-mono);
+      font-size: 1rem;
+      color: var(--text);
+      transition: all 0.2s;
+    }
+
+    .arch-box small {
+      display: block;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      margin-top: 4px;
+      font-family: var(--font-body);
+    }
+
+    .arch-box.highlight {
+      border-color: var(--accent);
+      background: rgba(255, 107, 107, 0.08);
+    }
+
+    .arch-box.highlight small {
+      color: var(--accent);
+    }
+
+    .arch-arrow {
+      color: var(--text-muted);
+      font-size: 1.5rem;
+    }
+
+    /* Steps Section */
+    .steps-list {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .step-item {
+      display: flex;
+      gap: 24px;
+      align-items: flex-start;
+      margin-bottom: 8px;
+    }
+
+    .step-num {
+      width: 48px;
+      height: 48px;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-mono);
+      font-size: 1.2rem;
+      font-weight: 700;
+      flex-shrink: 0;
+      box-shadow: var(--shadow-hard);
+    }
+
+    .step-body h3 {
+      font-size: 1.2rem;
+      margin-bottom: 4px;
+    }
+
+    .step-body p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+
+    .step-connector {
+      width: 2px;
+      height: 32px;
+      background: var(--border);
+      margin: 0 0 16px 23px;
+    }
+
+    /* CTA Section */
+    .cta-section {
+      background: linear-gradient(180deg, transparent 0%, rgba(255, 107, 107, 0.03) 100%);
+    }
+
+    .cta-box {
+      max-width: 600px;
+      margin: 0 auto;
+      text-align: center;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 48px 40px;
+    }
+
+    .cta-box h2 {
+      font-size: 2rem;
+      margin-bottom: 12px;
+    }
+
+    .cta-box p {
+      color: var(--text-muted);
+      margin-bottom: 28px;
+    }
+
+    .cta-code {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+    }
+
+    .cta-code code {
+      font-family: var(--font-mono);
+      font-size: 0.95rem;
+      color: var(--complete);
+    }
+
+    .copy-btn {
+      background: var(--bg-surface-hover);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: all 0.2s;
+    }
+
+    .copy-btn:hover {
+      border-color: var(--accent);
+    }
+
+    .install-row {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    /* Team Section */
+    .team-grid {
+      display: flex;
+      justify-content: center;
+      gap: 60px;
+      flex-wrap: wrap;
+    }
+
+    .team-member {
+      text-align: center;
+    }
+
+    .avatar {
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--bg-surface), var(--bg-surface-hover));
+      border: 3px solid var(--border);
+      margin: 0 auto 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 40px;
+      transition: all 0.3s;
+    }
+
+    .team-member:hover .avatar {
+      border-color: var(--accent);
+      transform: scale(1.05);
+    }
+
+    .team-member h4 {
+      font-size: 1rem;
+      margin-bottom: 4px;
+    }
+
+    .team-member p {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+
+    .team-links {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .team-link {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .team-link:hover {
+      border-color: var(--accent);
+      background: rgba(255, 107, 107, 0.1);
+    }
+
+    /* Footer */
+    .site-footer {
+      border-top: 2px dashed var(--border);
+      padding: 40px 0;
+    }
+
+    .footer-inner {
+      text-align: center;
+    }
+
+    .footer-inner p {
+      color: var(--text-muted);
+      margin-bottom: 16px;
+    }
+
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 32px;
+    }
+
+    .footer-links a {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      transition: color 0.2s;
+    }
+
+    .footer-links a:hover {
+      color: var(--accent);
+    }
+
+    /* Terminal Preview */
+    .terminal-preview {
+      max-width: 700px;
+      margin: 0 auto 40px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 20px 60px -20px rgba(255, 107, 107, 0.2);
+    }
+
+    .terminal-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      background: var(--bg-surface-hover);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .terminal-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+
+    .terminal-dot.red { background: #ef4444; }
+    .terminal-dot.yellow { background: #eab308; }
+    .terminal-dot.green { background: #22c55e; }
+
+    .terminal-title {
+      flex: 1;
+      text-align: center;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .terminal-body {
+      padding: 20px 24px;
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      line-height: 1.8;
+      text-align: left;
+    }
+
+    .terminal-line {
+      display: flex;
+      gap: 12px;
+    }
+
+    .terminal-prompt {
+      color: var(--complete);
+    }
+
+    .terminal-path {
+      color: var(--secondary);
+    }
+
+    .terminal-cmd {
+      color: var(--text);
+    }
+
+    .terminal-output {
+      color: var(--text-muted);
+      padding-left: 24px;
+    }
+
+    .terminal-output .success {
+      color: var(--complete);
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .hero-stats {
+        gap: 32px;
+      }
+
+      .stat-number {
+        font-size: 2rem;
+      }
+
+      .header-nav {
+        display: none;
+      }
+
+      .arch-flow {
+        flex-direction: column;
+      }
+
+      .arch-arrow {
+        transform: rotate(90deg);
+      }
+
+      .pathway-track {
+        justify-content: flex-start;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .hero-actions {
+        flex-direction: column;
+      }
+
+      .btn {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .features-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="header-inner">
+      <a href="#" class="logo">
+        <span class="logo-icon">●</span> AITerm
+      </a>
+      <nav class="header-nav">
+        <a href="#features">功能</a>
+        <a href="#architecture">架构</a>
+        <a href="#quickstart">快速上手</a>
+        <a href="https://github.com/zzyong24/AITerm" target="_blank" rel="noopener" class="header-github">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.4 3-.405 1.02.005 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+          <span>GitHub</span>
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-scene"></div>
+    <div class="hero-overlay"></div>
+    <div class="hero-content">
+      <div class="hero-badge">v0.1.0 · Electron + Vue 3 + TypeScript</div>
+      <h1 class="hero-title">
+        <span class="hero-line1">多终端管理器</span>
+        <span class="hero-line2">AITerm</span>
+      </h1>
+      <p class="hero-subtitle">基于 Electron + Vue 的现代化开发环境，让每一次编码都流畅自然</p>
+
+      <div class="hero-stats">
+        <div class="stat-item">
+          <span class="stat-number">6</span>
+          <span class="stat-label">核心功能</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-number">8</span>
+          <span class="stat-label">技术栈</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-number">3</span>
+          <span class="stat-label">平台支持</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-number">100%</span>
+          <span class="stat-label">开源</span>
+        </div>
+      </div>
+
+      <div class="terminal-preview">
+        <div class="terminal-header">
+          <span class="terminal-dot red"></span>
+          <span class="terminal-dot yellow"></span>
+          <span class="terminal-dot green"></span>
+          <span class="terminal-title">aiterm — zsh</span>
+        </div>
+        <div class="terminal-body">
+          <div class="terminal-line">
+            <span class="terminal-prompt">❯</span>
+            <span class="terminal-path">~/project</span>
+            <span class="terminal-cmd">npm run dev</span>
+          </div>
+          <div class="terminal-output">
+            <div>VITE ready in 234 ms</div>
+            <div>➜ Local: http://localhost:5173/</div>
+          </div>
+          <div class="terminal-line" style="margin-top: 12px;">
+            <span class="terminal-prompt">❯</span>
+            <span class="terminal-path">~/project</span>
+            <span class="terminal-cmd">aiterm</span>
+          </div>
+          <div class="terminal-output">
+            <div class="success">✓ AITerm 启动成功 · 3 个终端 · 2 个项目</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-actions">
+        <a href="https://www.npmjs.com/package/aiterm" class="btn btn-primary" target="_blank">
+          <span>📦</span> npm 安装
+        </a>
+        <a href="https://github.com/zzyong24/AITerm" class="btn btn-secondary" target="_blank">
+          <span>🐙</span> GitHub
+        </a>
+        <a href="#features" class="btn btn-secondary">
+          <span>📖</span> 了解更多
+        </a>
+      </div>
+
+      <div class="hero-stars">
+        <a href="https://github.com/zzyong24/AITerm" target="_blank" rel="noopener" class="star-badge">
+          <span>⭐</span> 在 GitHub 上查看
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pathway Strip -->
+  <section class="pathway-strip">
+    <div class="pathway-track">
+      <span class="pathway-tag highlight">Electron</span>
+      <span class="pathway-arrow">→</span>
+      <span class="pathway-tag">Vue 3</span>
+      <span class="pathway-arrow">→</span>
+      <span class="pathway-tag">TypeScript</span>
+      <span class="pathway-arrow">→</span>
+      <span class="pathway-tag highlight">xterm.js</span>
+      <span class="pathway-arrow">→</span>
+      <span class="pathway-tag">node-pty</span>
+      <span class="pathway-arrow">→</span>
+      <span class="pathway-tag">CodeMirror 6</span>
+      <span class="pathway-arrow">→</span>
+      <span class="pathway-tag highlight">SQLite</span>
+      <span class="pathway-arrow">→</span>
+      <span class="pathway-tag">WebSocket</span>
+    </div>
+  </section>
+
+  <!-- Why Section -->
+  <section class="section why-section" id="features">
+    <div class="container">
+      <h2 class="section-title">为什么选择 AITerm</h2>
+      <p class="section-subtitle">为开发者打造的现代化终端管理工具</p>
+
+      <div class="why-grid">
+        <div class="why-card card-rotate-1">
+          <div class="why-icon">🖥️</div>
+          <h3>真实终端体验</h3>
+          <p>基于 node-pty 的真实 PTY 终端，不是模拟。支持多会话 Tab 切换，终端历史保存恢复。</p>
+        </div>
+
+        <div class="why-card card-rotate-2">
+          <div class="why-icon">💾</div>
+          <h3>跨端状态同步</h3>
+          <p>基于 Server-as-SSOT 架构，SQLite + WebSocket 双模式。重启后还原终端和编辑器状态。</p>
+        </div>
+
+        <div class="why-card card-rotate-3">
+          <div class="why-icon">⚡</div>
+          <h3>一体化开发</h3>
+          <p>终端 + 编辑器 + Git 状态面板 + 文件搜索 + Kill Port，一个工具全搞定。</p>
+        </div>
+
+        <div class="why-card card-rotate-4">
+          <div class="why-icon">🔓</div>
+          <h3>完全开源</h3>
+          <p>MIT 许可证，源码完全开放。你可以自由使用、修改、定制自己的开发环境。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Architecture -->
+  <section class="section arch-section" id="architecture">
+    <div class="container">
+      <h2 class="section-title">技术架构</h2>
+      <p class="section-subtitle">简洁而强大的技术栈</p>
+
+      <div class="arch-diagram">
+        <h3>跨端状态同步架构</h3>
+        <div class="arch-flow">
+          <div class="arch-box">Electron<br><small>桌面壳</small></div>
+          <span class="arch-arrow">→</span>
+          <div class="arch-box highlight">SQLite<br><small>本地持久化</small></div>
+          <span class="arch-arrow">↔</span>
+          <div class="arch-box highlight">WebSocket<br><small>状态同步</small></div>
+          <span class="arch-arrow">→</span>
+          <div class="arch-box">多端一致<br><small>Server-as-SSOT</small></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Grid -->
+  <section class="section">
+    <div class="container">
+      <h2 class="section-title">核心功能</h2>
+      <p class="section-subtitle">everything you need</p>
+
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">🖥️</div>
+          <h3>多终端管理</h3>
+          <p>基于 node-pty 的真实 PTY 终端，支持多会话 Tab 切换</p>
+          <ul class="feature-list">
+            <li>多会话终端</li>
+            <li>子终端 Tab 切换</li>
+            <li>终端历史保存/恢复</li>
+          </ul>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">📁</div>
+          <h3>项目管理</h3>
+          <p>多项目统一管理，支持分组、重命名、状态持久化</p>
+          <ul class="feature-list">
+            <li>多项目管理（添加/删除/重命名）</li>
+            <li>项目分组</li>
+            <li>跨端状态同步</li>
+          </ul>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">⚡</div>
+          <h3>代码编辑</h3>
+          <p>内置 CodeMirror 6 编辑器，多语言语法高亮</p>
+          <ul class="feature-list">
+            <li>多语言语法高亮</li>
+            <li>目录树 + 右键菜单</li>
+            <li>文件搜索 + grep</li>
+          </ul>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🔀</div>
+          <h3>Git 集成</h3>
+          <p>简化日常工作流，状态面板 + 常用操作</p>
+          <ul class="feature-list">
+            <li>状态面板（staged/modified/untracked）</li>
+            <li>stage/unstage/discard/commit</li>
+            <li>push/pull + 分支信息</li>
+          </ul>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🔌</div>
+          <h3>工具集</h3>
+          <p>开发常用工具一键调用</p>
+          <ul class="feature-list">
+            <li>Kill Port 一键终止端口进程</li>
+            <li>刷新项目列表</li>
+            <li>清空记录</li>
+          </ul>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">💾</div>
+          <h3>跨端持久化</h3>
+          <p>基于 Server-as-SSOT 架构，跨会话状态同步</p>
+          <ul class="feature-list">
+            <li>重启后还原终端/编辑器状态</li>
+            <li>多端状态一致性</li>
+            <li>SQLite + WebSocket 双模式</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Steps -->
+  <section class="section" style="background: linear-gradient(180deg, transparent 0%, rgba(255,107,107,0.02) 100%);">
+    <div class="container">
+      <h2 class="section-title">快速上手</h2>
+      <p class="section-subtitle">六步开始使用</p>
+
+      <div class="steps-list">
+        <div class="step-item">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <h3>安装依赖</h3>
+            <p>npm install</p>
+          </div>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step-item">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <h3>启动开发</h3>
+            <p>npm run dev</p>
+          </div>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step-item">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <h3>添加项目</h3>
+            <p>在侧边栏添加你的第一个项目</p>
+          </div>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step-item">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <h3>开启终端</h3>
+            <p>双击项目打开终端会话</p>
+          </div>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step-item">
+          <div class="step-num">5</div>
+          <div class="step-body">
+            <h3>编辑代码</h3>
+            <p>使用内置 CodeMirror 编辑器</p>
+          </div>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step-item">
+          <div class="step-num">6</div>
+          <div class="step-body">
+            <h3>Git 操作</h3>
+            <p>在状态面板查看和操作 Git</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="section cta-section" id="quickstart">
+    <div class="container">
+      <div class="cta-box">
+        <h2>开始使用</h2>
+        <p>一条命令安装，马上体验</p>
+
+        <div class="cta-code">
+          <code id="installCmd">npm install -g aiterm</code>
+          <button class="copy-btn" onclick="navigator.clipboard.writeText('npm install -g aiterm')" title="复制">📋</button>
+        </div>
+
+        <div class="install-row">
+          <a href="https://www.npmjs.com/package/aiterm" class="btn btn-primary" target="_blank">
+            <span>📦</span> npm
+          </a>
+          <a href="https://github.com/zzyong24/AITerm" class="btn btn-secondary" target="_blank">
+            <span>🐙</span> GitHub
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Team -->
+  <section class="section">
+    <div class="container">
+      <h2 class="section-title">团队</h2>
+      <p class="section-subtitle">持续迭代中</p>
+
+      <div class="team-grid">
+        <div class="team-member">
+          <div class="avatar">👤</div>
+          <h4>love张</h4>
+          <p>Owner</p>
+          <div class="team-links">
+            <a href="https://github.com/lovezhang" class="team-link" target="_blank" title="GitHub">🐙</a>
+          </div>
+        </div>
+
+        <div class="team-member">
+          <div class="avatar">👤</div>
+          <h4>zzyong24</h4>
+          <p>核心开发</p>
+          <div class="team-links">
+            <a href="https://github.com/zzyong24" class="team-link" target="_blank" title="GitHub">🐙</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <p>AITerm v0.1.0 — 多终端管理器</p>
+      <div class="footer-links">
+        <a href="https://github.com/zzyong24/AITerm" target="_blank">GitHub</a>
+        <a href="https://www.npmjs.com/package/aiterm" target="_blank">npm</a>
+        <a href="https://github.com/zzyong24/AITerm/issues" target="_blank">问题反馈</a>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>
