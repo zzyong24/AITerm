@@ -348,13 +348,26 @@ export default defineComponent({
       })
       this.terminal.loadAddon(webLinksAddon)
 
-      // 使用 WebGL 渲染器提升滚动性能
-      this.webglAddon = new WebglAddon()
-      this.terminal.loadAddon(this.webglAddon)
-
       const container = this.$refs.terminalContainer as HTMLElement
       if (container) {
         this.terminal.open(container)
+
+        // WebglAddon 必须在 terminal.open() 之后 load：
+        // 它依赖 canvas DOM 初始化 WebGL context，提前 load 会导致
+        // activate() 未执行 → 渲染乱码 + beforeUnmount dispose 报错
+        try {
+          this.webglAddon = new WebglAddon()
+          this.webglAddon.onContextLoss(() => {
+            // WebGL context 丢失时（如切换 GPU）自动降级到 canvas 渲染
+            this.webglAddon?.dispose()
+            this.webglAddon = null
+          })
+          this.terminal.loadAddon(this.webglAddon)
+        } catch (e) {
+          console.warn('[Terminal] WebGL unavailable, falling back to canvas renderer:', e)
+          this.webglAddon = null
+        }
+
         this.fit()
 
         this.terminal.onData((data) => {
