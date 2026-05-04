@@ -37,13 +37,15 @@
     </div>
 
     <!-- 浏览器内容 -->
+    <!-- 使用 <webview> 而非 <iframe>：<iframe> 被 X-Frame-Options/CSP 拦截会白屏，
+         <webview> 是 Electron 独立渲染进程，绕过跨域限制，缩放用 setZoomFactor() 原生支持 -->
     <div class="browser-content" ref="browserContent">
-      <iframe
-        ref="iframeRef"
+      <webview
+        ref="webviewRef"
         :src="currentBrowser.url"
-        :style="{ transform: `scale(${currentBrowser.zoom / 100})` }"
-        @load="handleIframeLoad"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+        class="browser-webview"
+        @did-finish-load="handleWebviewLoad"
+        @did-fail-load="handleWebviewFailLoad"
       />
     </div>
   </div>
@@ -53,7 +55,7 @@
 </template>
 
 <script lang="ts">
-import { defineComponent } from 'vue'
+import { defineComponent, nextTick } from 'vue'
 import { appBusiness, AppEvents, type BrowserTab } from '../store/AppBusiness'
 import { eventBus } from '../utils/EventBus'
 
@@ -74,8 +76,7 @@ export default defineComponent({
   data() {
     return {
       browsers: [] as BrowserTab[],
-      url: '',
-      iframeKey: 0
+      url: ''
     }
   },
 
@@ -94,12 +95,15 @@ export default defineComponent({
       if (newBrowser && newBrowser.url !== this.url) {
         this.url = newBrowser.url
       }
+    },
+    // 缩放变化时通过 webview API 应用，避免 CSS transform 导致布局错位
+    'currentBrowser.zoom'(newZoom: number) {
+      this.applyZoom(newZoom)
     }
   },
 
   mounted() {
     eventBus.on(AppEvents.BROWSERS_CHANGE, this.handleBrowsersChange)
-
     this.browsers = [...appBusiness.browsers]
     this.syncUrl()
   },
@@ -120,11 +124,14 @@ export default defineComponent({
       }
     },
 
+    getWebview(): Electron.WebviewTag | null {
+      return (this.$refs.webviewRef as Electron.WebviewTag) || null
+    },
+
     handleLoadUrl() {
       if (!this.currentBrowser || !this.url.trim()) return
 
       let url = this.url.trim()
-      // 如果没有协议，添加 https://
       if (!url.startsWith('http://') && !url.startsWith('https://')) {
         url = 'https://' + url
       }
@@ -132,25 +139,57 @@ export default defineComponent({
       appBusiness.updateBrowserUrl(this.currentBrowser.id, url)
       this.url = url
 
-      // 重新加载 iframe
-      this.$nextTick(() => {
-        this.reloadIframe()
+      nextTick(() => {
+        const wv = this.getWebview()
+        if (wv) {
+          wv.src = url
+        }
       })
     },
 
     handleRefresh() {
-      this.reloadIframe()
-    },
-
-    reloadIframe() {
-      if (this.$refs.iframeRef) {
-        const iframe = this.$refs.iframeRef as HTMLIFrameElement
-        iframe.src = iframe.src
+      const wv = this.getWebview()
+      if (wv) {
+        wv.reload()
       }
     },
 
-    handleIframeLoad() {
-      console.log('[BrowserView] iframe loaded')
+    handleWebviewLoad() {
+      const wv = this.getWebview()
+      if (!wv) return
+
+      // 同步 webview 实际 URL 到工具栏（处理页面内跳转）
+      try {
+        const currentUrl = wv.getURL()
+        if (currentUrl && currentUrl !== this.url) {
+          this.url = currentUrl
+          if (this.currentBrowser) {
+            appBusiness.updateBrowserUrl(this.currentBrowser.id, currentUrl)
+          }
+        }
+      } catch {
+        // getURL() 在 did-finish-load 前调用偶发异常，忽略
+      }
+
+      // 恢复缩放
+      this.applyZoom(this.currentBrowser?.zoom ?? 100)
+
+      console.log('[BrowserView] webview loaded:', wv.getURL())
+    },
+
+    handleWebviewFailLoad(_event: Event) {
+      console.warn('[BrowserView] webview failed to load')
+    },
+
+    applyZoom(zoom: number) {
+      const wv = this.getWebview()
+      if (!wv) return
+      try {
+        // setZoomFactor 是 Electron webview 原生 API，1.0 = 100%
+        wv.setZoomFactor(zoom / 100)
+      } catch {
+        // webview 尚未 ready 时忽略
+      }
     },
 
     zoomIn() {
@@ -232,12 +271,10 @@ export default defineComponent({
   background: #ffffff;
 }
 
-.browser-content iframe {
+.browser-webview {
   width: 100%;
   height: 100%;
   border: none;
-  transform-origin: top left;
-  background: #ffffff;
 }
 
 .no-browser {

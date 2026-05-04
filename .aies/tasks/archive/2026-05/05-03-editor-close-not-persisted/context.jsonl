@@ -1,0 +1,7 @@
+{"phase": "research", "file": "src/store/AppBusiness.ts", "symbol": "closeEditor", "reason": "closeEditor 缺少 removeEditor 调用，需先确认当前逻辑"}
+{"phase": "research", "file": "server/routes.mjs", "symbol": "/api/save-editors", "reason": "stub 路由，需改为真正写 SQLite 或废弃"}
+{"phase": "research", "file": "src/api/http.ts", "symbol": "removeEditor", "reason": "确认 removeEditor 接口已正确实现"}
+{"phase": "implement", "spec": "architecture.md", "reason": "理解分层约束，server/routes 不能跳过 DatabaseService 直写 db"}
+{"phase": "implement", "spec": "code-style.md", "reason": "命名和格式规范"}
+{"phase": "check", "spec": "quality-gates.md", "reason": "质量门自检"}
+{"phase": "check", "spec": "error-handling.md", "reason": "removeEditor 失败时的错误处理"}

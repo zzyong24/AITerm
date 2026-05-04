@@ -1,0 +1,8 @@
+{"phase": "research", "file": "server/services/ProjectService.mjs", "reason": "JSON 文件持久化实现，确认 delete 方法"}
+{"phase": "research", "file": "server/services/DatabaseService.mjs", "reason": "SQLite 实现，确认是否有 cascade delete，新增方法位置"}
+{"phase": "research", "file": "server/routes.mjs", "symbol": "DELETE /api/projects/:id", "reason": "删除路由，需要调用级联清理"}
+{"phase": "research", "file": "src/store/AppBusiness.ts", "symbol": "removeProject", "reason": "客户端 removeProject 调用链"}
+{"phase": "implement", "spec": "architecture.md", "reason": "数据库操作必须通过 DatabaseService，不能在 routes 层直接操作 db"}
+{"phase": "implement", "spec": "code-style.md", "reason": "新增方法命名规范"}
+{"phase": "check", "spec": "quality-gates.md", "reason": "质量门自检"}
+{"phase": "check", "spec": "error-handling.md", "reason": "级联删除部分失败时的处理策略"}

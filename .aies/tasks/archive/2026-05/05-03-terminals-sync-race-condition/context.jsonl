@@ -1,0 +1,8 @@
+{"phase": "research", "file": "src/store/AppBusiness.ts", "symbol": "syncTerminalsToSQLite", "reason": "当前全量替换实现，需确认调用路径"}
+{"phase": "research", "file": "server/routes.mjs", "symbol": "PUT /api/state", "reason": "全量替换的服务端实现，确认 DELETE ALL 逻辑"}
+{"phase": "research", "file": "electron/main.ts", "symbol": "update-full-state", "reason": "IPC handler 直接用 db.prepare() 绕过抽象"}
+{"phase": "research", "file": "src/api/http.ts", "symbol": "persistTerminal,removePersistedTerminal,updatePersistedTerminal", "reason": "确认精确操作接口已存在"}
+{"phase": "implement", "spec": "architecture.md", "reason": "精确操作替代全量替换的分层约束"}
+{"phase": "implement", "spec": "code-style.md", "reason": "命名和格式规范"}
+{"phase": "check", "spec": "quality-gates.md", "reason": "质量门自检"}
+{"phase": "check", "spec": "error-handling.md", "reason": "单条操作失败时的回滚策略"}

@@ -195,6 +195,9 @@ export const killPort = (port: number) =>
     body: JSON.stringify({ port }),
   }).then(res => res.result)
 
+export const clearAllState = (): Promise<{ success: boolean }> =>
+  apiCall<{ success: boolean }>('/clear-all-state', { method: 'POST' })
+
 export const isGitIgnored = (path: string) =>
   apiCall<boolean>('/is-git-ignored', {
     method: 'POST',
@@ -383,10 +386,10 @@ export const updateFullState = (state: Partial<PersistedState>) =>
   })
 
 // 持久化终端（创建）
-export const persistTerminal = (id: string, name: string, cwd: string, taskSlug?: string) =>
+export const persistTerminal = (id: string, name: string, cwd: string, taskSlug?: string | null, projectId?: string | null) =>
   apiCall('/persist/terminals', {
     method: 'POST',
-    body: JSON.stringify({ id, name, cwd, taskSlug }),
+    body: JSON.stringify({ id, name, cwd, taskSlug, projectId }),
   })
 
 // 持久化终端（更新）
@@ -485,6 +488,23 @@ export const terminalClosedListener = (callback: (data: { session_id: string }) 
 export const terminalActivityListener = (callback: (data: { session_id: string; bytes: number }) => void) => {
   terminalWs.on('activity', callback)
   return () => terminalWs.off('activity', callback)
+}
+
+/**
+ * terminal-renamed：服务端广播后立即更新本地 Tab 标签，无需等待全量 state reload
+ */
+export const terminalRenamedListener = (callback: (data: { sessionId: string; name: string }) => void) => {
+  terminalWs.on('terminal-renamed', callback)
+  return () => terminalWs.off('terminal-renamed', callback)
+}
+
+/**
+ * 跨端状态同步：当其他客户端修改了 projects/terminals/editors 时触发
+ * entity: 'projects' | 'terminals' | 'editors'
+ */
+export const stateChangedListener = (callback: (data: { entity: string }) => void) => {
+  terminalWs.on('state_changed', callback)
+  return () => terminalWs.off('state_changed', callback)
 }
 
 // 连接 WebSocket

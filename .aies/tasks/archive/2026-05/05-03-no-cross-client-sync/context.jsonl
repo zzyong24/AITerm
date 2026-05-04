@@ -1,0 +1,7 @@
+{"phase": "research", "file": "server/routes.mjs", "symbol": "broadcastToWs", "reason": "当前 WebSocket 广播范围，确认只有 PTY 事件"}
+{"phase": "research", "file": "src/api/http.ts", "symbol": "TerminalWebSocket", "reason": "客户端 WS 接收逻辑，了解如何注册新事件类型"}
+{"phase": "research", "file": "src/store/AppBusiness.ts", "symbol": "terminalOutputListener", "reason": "现有 WS 事件监听模式，新事件要保持一致"}
+{"phase": "implement", "spec": "architecture.md", "reason": "广播逻辑属于 server 层，不能跨层调用 AppBusiness"}
+{"phase": "implement", "spec": "code-style.md", "reason": "事件命名规范"}
+{"phase": "check", "spec": "quality-gates.md", "reason": "质量门自检"}
+{"phase": "check", "spec": "error-handling.md", "reason": "WS 断线重连期间的状态一致性"}

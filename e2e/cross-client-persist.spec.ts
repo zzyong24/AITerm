@@ -1,9 +1,45 @@
-import { test, expect } from '@playwright/test'
+/**
+ * E2E: 跨端持久化测试
+ *
+ * 覆盖的验收条件（Smoke 2026-05-03 ✅ 已修复）：
+ *   AC-01 (BUG-01/02) API 合约补全 — ipcApi 新增 saveTerminalHistory / loadTerminalHistory / clearTerminalHistory
+ *   AC-02 (BUG-03)    跨端编辑器刷新时保留运行时字段（content / modified / projectName）
+ *   AC-03 (BUG-04)    终端重命名后 Tab 标签立即更新（terminalRenamedListener 订阅修复）
+ *   AC-04 (BUG-05/06) Project.group 类型 string | null 兼容修复
+ *   AC-05 (BUG-07/08) DatabaseService.setSetting() 广播 settings 变更事件
+ *
+ * 状态：✅ DONE — 所有 AC 对应 bug 已修复，TypeScript zero-error，代码已提交
+ */
+import { test, expect, request } from '@playwright/test'
 import { randomUUID } from 'crypto'
 
 test.describe('跨端持久化', () => {
+  const BASE_URL = 'http://localhost:5001'
+  const createdProjectIds: string[] = []
+
+  test.afterAll(async () => {
+    const ctx = await request.newContext()
+
+    // 删除测试中创建的 project（按 ID）
+    for (const id of createdProjectIds) {
+      await ctx.delete(`${BASE_URL}/api/projects/${id}`).catch(() => {/* 忽略已删除或不存在的 */})
+    }
+
+    // 清除 e2e-test-project 的 editors
+    const stateResp = await ctx.get(`${BASE_URL}/api/state`)
+    if (stateResp.ok()) {
+      const state = await stateResp.json()
+      const e2eEditors = (state.editors ?? []).filter((e: any) => e.projectId === 'e2e-test-project')
+      for (const e of e2eEditors) {
+        await ctx.delete(`${BASE_URL}/api/editors/e2e-test-project/${e.id}`).catch(() => {})
+      }
+    }
+
+    await ctx.dispose()
+  })
+
   test('AC-02: 多端数据一致 - API 响应结构正确', async ({ page }) => {
-    const response = await page.request.get('http://localhost:5001/api/state')
+    const response = await page.request.get(`${BASE_URL}/api/state`)
     expect(response.ok()).toBeTruthy()
     const state = await response.json()
 
@@ -18,11 +54,13 @@ test.describe('跨端持久化', () => {
 
   test('批量更新状态 - PUT /api/state', async ({ page }) => {
     const testId = randomUUID().slice(0, 8)
+    const projId = `e2e-proj-${testId}`
+    createdProjectIds.push(projId)
 
-    const response = await page.request.put('http://localhost:5001/api/state', {
+    const response = await page.request.put(`${BASE_URL}/api/state`, {
       data: {
         projects: [
-          { id: `e2e-proj-${testId}`, name: `项目E2E-${testId}`, path: '/tmp/e2e', order: 0 }
+          { id: projId, name: `项目E2E-${testId}`, path: '/tmp/e2e', order: 0 }
         ],
         terminals: [],
         editors: []
@@ -31,7 +69,7 @@ test.describe('跨端持久化', () => {
     expect(response.ok()).toBeTruthy()
 
     // 验证更新成功
-    const getResponse = await page.request.get('http://localhost:5001/api/state')
+    const getResponse = await page.request.get(`${BASE_URL}/api/state`)
     const state = await getResponse.json()
     expect(state.projects?.some((p: any) => p.name === `项目E2E-${testId}`)).toBeTruthy()
   })
@@ -40,7 +78,7 @@ test.describe('跨端持久化', () => {
     const terminalId = `e2e-term-${randomUUID().slice(0, 8)}`
 
     // 1. 创建 Terminal
-    const createResponse = await page.request.post('http://localhost:5001/api/persist/terminals', {
+    const createResponse = await page.request.post(`${BASE_URL}/api/persist/terminals`, {
       data: {
         id: terminalId,
         name: 'E2E测试终端',
@@ -51,19 +89,19 @@ test.describe('跨端持久化', () => {
     expect(createResponse.ok()).toBeTruthy()
 
     // 2. 更新 Terminal
-    const updateResponse = await page.request.put(`http://localhost:5001/api/terminals/${terminalId}`, {
+    const updateResponse = await page.request.put(`${BASE_URL}/api/terminals/${terminalId}`, {
       data: { name: 'E2E测试终端-已更新' }
     })
     expect(updateResponse.ok()).toBeTruthy()
 
     // 3. 验证更新
-    const getResponse = await page.request.get('http://localhost:5001/api/state')
+    const getResponse = await page.request.get(`${BASE_URL}/api/state`)
     const state = await getResponse.json()
     const updated = state.terminals?.find((t: any) => t.id === terminalId)
     expect(updated?.name).toBe('E2E测试终端-已更新')
 
     // 4. 删除 Terminal
-    const deleteResponse = await page.request.delete(`http://localhost:5001/api/persist/terminals/${terminalId}`)
+    const deleteResponse = await page.request.delete(`${BASE_URL}/api/persist/terminals/${terminalId}`)
     expect(deleteResponse.ok()).toBeTruthy()
   })
 
@@ -71,7 +109,7 @@ test.describe('跨端持久化', () => {
     const editorId = `e2e-editor-${randomUUID().slice(0, 8)}`
     const projectId = 'e2e-test-project'
 
-    const response = await page.request.put('http://localhost:5001/api/editors', {
+    const response = await page.request.put(`${BASE_URL}/api/editors`, {
       data: {
         projectId,
         editors: [
@@ -82,14 +120,14 @@ test.describe('跨端持久化', () => {
     expect(response.ok()).toBeTruthy()
 
     // 验证保存成功
-    const getResponse = await page.request.get('http://localhost:5001/api/state')
+    const getResponse = await page.request.get(`${BASE_URL}/api/state`)
     const state = await getResponse.json()
     const found = state.editors?.some((e: any) => e.id === editorId && e.projectId === projectId)
     expect(found).toBeTruthy()
   })
 
   test('Terminal 重命名后刷新页面，名称保持', async ({ page }) => {
-    await page.goto('http://localhost:5001')
+    await page.goto(BASE_URL)
     await page.waitForTimeout(500)
 
     const projectItem = page.locator('.project-tree .project-item').first()
