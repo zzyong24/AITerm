@@ -4,7 +4,7 @@
 
 # 🖥️ AITerm
 
-### *多终端管理器 — 基于 Electron + Vue 的现代化开发环境*
+### *多终端管理器 — 基于 Electron + Vue 的现代化开发环境。*
 
 <!-- Primary badges -->
 [![License: MIT](https://img.shields.io/badge/License-MIT-A8E6CF?style=for-the-badge&labelColor=0D1117)](LICENSE)
