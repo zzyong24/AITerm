@@ -270,6 +270,7 @@ export class PtyService extends EventEmitter {
   }
 
   getShellEnv() {
+    const isWin = process.platform === 'win32'
     const baseEnv = {}
 
     // 复制当前环境
@@ -277,6 +278,13 @@ export class PtyService extends EventEmitter {
       if (process.env[key] !== undefined) {
         baseEnv[key] = process.env[key]
       }
+    }
+
+    // Windows: 直接继承 process.env，不要手动拼接 PATH。
+    // Electron 主进程已经继承了系统环境变量，手动拼接反而会因为
+    // 使用 ':' 分隔符和混入 Unix 路径而破坏 PATH，导致 npm/node 找不到。
+    if (isWin) {
+      return baseEnv
     }
 
     // Claude 通常安装在 ~/.claude/bin，需要确保 PATH 包含它

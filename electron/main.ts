@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, dialog, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, dialog, shell, clipboard } from 'electron'
 import express from 'express'
 import cors from 'cors'
 import { join } from 'path'
@@ -531,6 +531,15 @@ function registerIpcHandlers() {
   // 外部链接
   ipcMain.handle('open-external', async (_, url: string) => {
     await shell.openExternal(url)
+  })
+
+  // 剪贴板读写
+  ipcMain.handle('clipboard-write-text', async (_, text: string) => {
+    clipboard.writeText(text)
+  })
+
+  ipcMain.handle('clipboard-read-text', async () => {
+    return clipboard.readText()
   })
 
   log.info('IPC handlers registered')

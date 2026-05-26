@@ -134,6 +134,12 @@ export const writeFile = (path: string, content: string) =>
 export const pasteFile = (targetDir: string, clipboardPath: string) =>
   window.electronAPI.invoke('paste-file', targetDir, clipboardPath)
 
+export const writeClipboardText = (text: string) =>
+  window.electronAPI.invoke('clipboard-write-text', text)
+
+export const readClipboardText = () =>
+  window.electronAPI.invoke<string>('clipboard-read-text')
+
 export const killPort = (port: number) =>
   window.electronAPI.invoke<string>('kill-port', port)
 
