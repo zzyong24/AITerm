@@ -1,5 +1,5 @@
 const API_BASE = `http://${window.location.hostname}:5001/api`
-const WS_BASE = `ws://${window.location.hostname}:5002`
+const WS_BASE = `ws://${window.location.hostname}:5001/ws`
 
 export interface Project {
   id: string

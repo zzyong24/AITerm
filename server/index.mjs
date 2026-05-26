@@ -23,7 +23,7 @@ const { setHttpServer } = registerRoutes(app, { ptyService, projectService, file
   enableWs: true
 })
 
-const httpServer = app.listen(PORT, () => {
+const httpServer = app.listen(PORT, '0.0.0.0', () => {
   console.log(`AITerm backend server running on http://localhost:${PORT}`)
   console.log(`WebSocket server running on ws://localhost:${PORT}/ws`)
 })

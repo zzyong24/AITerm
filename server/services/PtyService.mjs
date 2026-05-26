@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { execSync } from 'child_process'
 import { homedir } from 'os'
 import { dirname } from 'path'
+import { existsSync } from 'fs'
 
 export class PtyService extends EventEmitter {
   constructor() {
@@ -14,10 +15,15 @@ export class PtyService extends EventEmitter {
 
   async createSession(projectId, projectName, workingDir) {
     // macOS 默认是 zsh，优先使用 zsh
-    const shell = process.platform === 'win32' ? 'powershell.exe' :
+    const isWin = process.platform === 'win32'
+    const shell = isWin ? 'powershell.exe' :
                    process.platform === 'darwin' ? '/bin/zsh' :
                    (process.env.SHELL || 'bash')
-    const cwd = workingDir || this.getHomeDir()
+    let cwd = workingDir || this.getHomeDir()
+    if (!existsSync(cwd)) {
+      console.warn(`[PtyService] cwd does not exist: ${cwd}, falling back to home dir`)
+      cwd = this.getHomeDir()
+    }
 
     console.log(`Creating PTY session: shell=${shell}, cwd=${cwd}`)
 
@@ -25,8 +31,9 @@ export class PtyService extends EventEmitter {
     const shellEnv = this.getShellEnv()
 
     // 使用交互式 shell 启动，确保 source ~/.zshrc（macOS 用户通常在这里配置 Claude）
-    // -i 表示交互式 shell
-    const ptyProcess = pty.spawn(shell, ['-i'], {
+    // -i 表示交互式 shell；Windows PowerShell 不支持该参数，传空数组
+    const shellArgs = isWin ? [] : ['-i']
+    const ptyProcess = pty.spawn(shell, shellArgs, {
       name: 'xterm-256color',
       cols: 80,
       rows: 24,
