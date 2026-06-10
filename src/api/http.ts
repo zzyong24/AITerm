@@ -1,5 +1,5 @@
 const API_BASE = `http://${window.location.hostname}:5001/api`
-const WS_BASE = `ws://${window.location.hostname}:5002`
+const WS_BASE = `ws://${window.location.hostname}:5001/ws`
 
 export interface Project {
   id: string
@@ -188,6 +188,43 @@ export const pasteFile = (targetDir: string, clipboardPath: string) =>
     method: 'POST',
     body: JSON.stringify({ targetDir, clipboardPath }),
   })
+
+export const writeClipboardText = (text: string): Promise<void> => {
+  if (typeof navigator !== 'undefined' && navigator.clipboard) {
+    return navigator.clipboard.writeText(text)
+  }
+  if (typeof window !== 'undefined' && (window as any).electronAPI) {
+    return (window as any).electronAPI.invoke('clipboard-write-text', text)
+  }
+  // 浏览器非安全上下文 fallback：用 execCommand 复制
+  try {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.style.position = 'fixed'
+    textarea.style.left = '-9999px'
+    textarea.style.top = '0'
+    document.body.appendChild(textarea)
+    textarea.focus()
+    textarea.select()
+    const success = document.execCommand('copy')
+    document.body.removeChild(textarea)
+    if (success) {
+      return Promise.resolve()
+    }
+  } catch { /* ignore */ }
+  return Promise.reject(new Error('Clipboard API not available'))
+}
+
+export const readClipboardText = (): Promise<string> => {
+  if (typeof navigator !== 'undefined' && navigator.clipboard) {
+    return navigator.clipboard.readText()
+  }
+  if (typeof window !== 'undefined' && (window as any).electronAPI) {
+    return (window as any).electronAPI.invoke<string>('clipboard-read-text')
+  }
+  // 浏览器非安全上下文下无法读取剪贴板
+  return Promise.reject(new Error('Clipboard read not available in this browser context'))
+}
 
 export const killPort = (port: number) =>
   apiCall<{ result: string }>('/kill-port', {

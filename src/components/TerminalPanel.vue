@@ -178,6 +178,9 @@ export default defineComponent({
       const project = appBusiness.projects[0]
       if (project) {
         this.$emit('launch', { id: project.id, name: project.name, path: project.path })
+      } else {
+        console.warn('[TerminalPanel] No project available, cannot create terminal')
+        alert('请先创建一个项目，再新建终端')
       }
     },
     startRename(session: TerminalSession) {

@@ -171,7 +171,12 @@ export default defineComponent({
 
     // 业务方法
     async handleLaunch(project: { id: string; name: string; path: string }) {
-      await appBusiness.launchTerminal(project.id, project.name, project.path)
+      try {
+        await appBusiness.launchTerminal(project.id, project.name, project.path)
+      } catch (e) {
+        console.error('[App] Failed to launch terminal:', e)
+        alert('启动终端失败: ' + (e instanceof Error ? e.message : String(e)))
+      }
     },
 
     handleOpenEditor({ projectId, projectName, path, content, line }: { projectId: string | null; projectName: string | null; path: string; content: string; line?: number }) {

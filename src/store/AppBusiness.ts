@@ -624,14 +624,40 @@ class AppBusinessClass {
 
   // 自动恢复所有项目的终端
   async restoreAllTerminals() {
-    // 如果有从 SQLite 加载的终端数据，使用它而不是调 API
+    // Step 1: 先查询后端当前已有的活跃 PTY 会话
+    let remoteSessions: any[] = []
+    try {
+      remoteSessions = await apiListSessions()
+      console.log('[AppBusiness] Remote active sessions:', remoteSessions.length)
+    } catch (e) {
+      console.warn('[AppBusiness] Failed to list remote sessions:', e)
+    }
+
+    // Step 2: 如果后端已有活跃会话，直接采用（不创建新 PTY）
+    if (remoteSessions.length > 0) {
+      for (const remote of remoteSessions) {
+        if (!this.sessions.find(s => s.id === remote.id)) {
+          const project = this.projects.find(p => p.id === remote.projectId)
+          const projectName = remote.projectName || project?.name || null
+          this.adoptSession(remote.id, remote.projectId, projectName, remote.workingDir, remote.name)
+        }
+      }
+      // 清理 SQLite 中过期的记录（服务端已有真实 PTY，不再需要 SQLite 备份来恢复）
+      if (this.persistedTerminals.length > 0) {
+        for (const terminal of this.persistedTerminals) {
+          await removePersistedTerminal(terminal.id).catch(() => {})
+        }
+        this.persistedTerminals = []
+      }
+      return
+    }
+
+    // Step 3: 后端没有活跃会话时，才从 SQLite / 文件恢复并创建新 PTY
     if (this.persistedTerminals.length > 0) {
       console.log('[AppBusiness] Restoring terminals from SQLite:', this.persistedTerminals.length)
-      // BUG FIX #2: Add deduplication check to prevent exponential duplication
-      // Keep track of already-restored terminals to prevent restoring the same terminal twice
       const restoredSessionIds = new Set<string>()
 
-      // 设置 isSyncing = true，屏蔽 launchTerminal + removePersistedTerminal 触发的 state_changed 回声
+      // 设置 isSyncing = true，屏蔽 launchTerminal 触发的 state_changed 回声
       this.isSyncing = true
       try {
         for (const terminal of this.persistedTerminals) {
@@ -650,9 +676,6 @@ class AppBusinessClass {
               if (terminal.name && terminal.name !== project.name) {
                 this.renameSession(sessionId, terminal.name)
               }
-              // BUG-FIX: 删除旧的 persisted 记录，防止每次刷新翻倍
-              // launchTerminal 已经用新 sessionId 写入 SQLite，旧 terminal.id 记录已过期
-              await removePersistedTerminal(terminal.id).catch(() => {})
               console.log('[AppBusiness] Restored terminal:', terminal.name, 'for project:', project.name)
             } catch (e) {
               console.warn('[AppBusiness] Failed to restore terminal:', terminal.name, e)
@@ -711,6 +734,9 @@ class AppBusinessClass {
   // ============ 终端会话 ============
   async createSession(projectId: string | null, projectName: string | null, workingDir?: string): Promise<string> {
     const sessionId = await apiCreateTerminalSession(projectId, projectName, workingDir)
+    if (!sessionId) {
+      throw new Error('Backend returned empty sessionId')
+    }
     const newSession: TerminalSession = {
       id: sessionId,
       projectId,

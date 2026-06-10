@@ -27,8 +27,9 @@
     <!-- 右键菜单 -->
     <div v-if="contextMenu.visible" class="context-menu"
       :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }" @click.stop>
-      <div class="context-menu-item" @click="handleOpenInBrowser">在浏览器中打开</div>
-      <div class="context-menu-item" @click="handleCopySelection">复制</div>
+      <div v-if="contextMenu.selectedText" class="context-menu-item" @click="handleOpenInBrowser">在浏览器中打开</div>
+      <div v-if="contextMenu.selectedText" class="context-menu-item" @click="handleCopySelection">复制</div>
+      <div class="context-menu-item" @click="handlePaste">粘贴</div>
     </div>
 
     <!-- 终端操作按钮 -->
@@ -56,7 +57,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
-import { terminalOutputListener, terminalClosedListener, writeToTerminal, resizeTerminal } from '../api'
+import { terminalOutputListener, terminalClosedListener, writeToTerminal, resizeTerminal, writeClipboardText, readClipboardText } from '../api'
 import { appBusiness, AppEvents } from '../store/AppBusiness'
 
 // 检测终端输出是否包含需要人工干预的模式
@@ -379,6 +380,34 @@ export default defineComponent({
           resizeTerminal(this.id, rows, cols)
         })
 
+        // 自定义键盘事件：支持 Ctrl/Cmd + C/V 复制粘贴
+        this.terminal.attachCustomKeyEventHandler((event) => {
+          const isMac = navigator.platform.includes('Mac')
+          const modKey = isMac ? event.metaKey : event.ctrlKey
+
+          // Ctrl+C / Cmd+C: 有选中文本则复制，否则发给 PTY（SIGINT）
+          if (modKey && event.key.toLowerCase() === 'c') {
+            const selection = this.terminal?.getSelection()
+            if (selection && selection.length > 0) {
+              writeClipboardText(selection).catch((err: any) => console.error('Copy failed:', err))
+              return false // 阻止 xterm 把 Ctrl+C 发给 PTY
+            }
+            return true // 无选中，正常中断进程
+          }
+
+          // Ctrl+V / Cmd+V: 从剪贴板粘贴到终端
+          if (modKey && event.key.toLowerCase() === 'v') {
+            readClipboardText().then(text => {
+              if (text && this.id) {
+                writeToTerminal(this.id, text)
+              }
+            }).catch((err: any) => console.error('Paste failed:', err))
+            return false // 阻止 xterm 把 Ctrl+V 字符发给 PTY
+          }
+
+          return true
+        })
+
         // 监听选择变化
         this.terminal.onSelectionChange(() => {
           const selection = this.terminal?.selection
@@ -474,27 +503,25 @@ export default defineComponent({
 
     handleContextMenu(e: MouseEvent) {
       e.preventDefault()
-      const selection = this.terminal?.selection
-      if (selection && selection.length > 0) {
-        this.contextMenu.selectedText = selection
-        this.contextMenu.visible = true
-        this.contextMenu.x = e.clientX
-        this.contextMenu.y = e.clientY
+      const selection = this.terminal?.getSelection() || ''
+      this.contextMenu.selectedText = selection
+      this.contextMenu.visible = true
+      this.contextMenu.x = e.clientX
+      this.contextMenu.y = e.clientY
 
-        // 调整菜单位置确保不超出屏幕
-        this.$nextTick(() => {
-          const menu = document.querySelector('.terminal-wrapper .context-menu') as HTMLElement
-          if (menu) {
-            const rect = menu.getBoundingClientRect()
-            if (rect.right > window.innerWidth) {
-              this.contextMenu.x = window.innerWidth - rect.width - 10
-            }
-            if (rect.bottom > window.innerHeight) {
-              this.contextMenu.y = window.innerHeight - rect.height - 10
-            }
+      // 调整菜单位置确保不超出屏幕
+      this.$nextTick(() => {
+        const menu = document.querySelector('.terminal-wrapper .context-menu') as HTMLElement
+        if (menu) {
+          const rect = menu.getBoundingClientRect()
+          if (rect.right > window.innerWidth) {
+            this.contextMenu.x = window.innerWidth - rect.width - 10
           }
-        })
-      }
+          if (rect.bottom > window.innerHeight) {
+            this.contextMenu.y = window.innerHeight - rect.height - 10
+          }
+        }
+      })
     },
 
     closeContextMenu() {
@@ -520,8 +547,17 @@ export default defineComponent({
     handleCopySelection() {
       const text = this.contextMenu.selectedText
       if (text) {
-        navigator.clipboard.writeText(text)
+        writeClipboardText(text).catch((err: any) => console.error('Copy failed:', err))
       }
+      this.closeContextMenu()
+    },
+
+    handlePaste() {
+      readClipboardText().then(text => {
+        if (text && this.id) {
+          writeToTerminal(this.id, text)
+        }
+      }).catch((err: any) => console.error('Paste failed:', err))
       this.closeContextMenu()
     },
 
